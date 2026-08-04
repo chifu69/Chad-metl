@@ -48,3 +48,11 @@ This version is suitable for functional validation and representative-user testi
 - Enhanced dashboard KPIs and shift coverage
 - Embedded workbook baseline: 24 personnel, 10 evaluators, 33 tasks, 468 subtasks
 - Existing local assessment, corrective action, audit, backup, and AI-readiness logic preserved
+
+
+## Version 2.1 — Real workforce data loaded
+- Personnel names and employee numbers are loaded from the supplied workbook.
+- Occupied roster positions are marked Active.
+- Unfilled roster slots remain Vacant.
+- A new local-storage key prevents older demonstration data from overriding this baseline.
+- Service-worker cache updated for installed devices.

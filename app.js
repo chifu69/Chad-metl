@@ -7,7 +7,7 @@ const profiles=[
  {id:'associate',name:'Dustin Cox',role:'associate',label:'Extrusion Associate',employeeNumber:'1018'},
  {id:'leader',name:'Plant Leadership',role:'viewer',label:'Leadership / Read-only'}];
 let state,currentUser,view='dashboard';
-const storageKey='k1-metl-pilot-state-v01';
+const storageKey='k1-metl-enterprise-real-data-v21';
 function esc(v=''){return String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function toast(t){$('#toast').textContent=t;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),1800)}
 function save(){
@@ -106,7 +106,7 @@ function allowed(id){if(currentUser.role==='associate')return ['dashboard','task
 function renderNav(){
  const groups=navItems.map(g=>{const items=g.items.filter(([id])=>allowed(id));if(!items.length)return '';return `<div class="nav-group">${g.group}</div>${items.map(([id,label])=>`<button class="nav-link" data-view="${id}">${iconSvg[id]}<span>${label}</span></button>`).join('')}`}).join('');
  const stamp=state.meta?.generated||new Date().toISOString().slice(0,10);
- $('#nav').innerHTML=`${groups}<div class="nav-spacer"></div><div class="nav-footer"><strong>${esc(currentUser.name)}</strong>${esc(currentUser.label)}<br>Workbook baseline: ${esc(stamp)}<br>v2.0 Enterprise</div>`;
+ $('#nav').innerHTML=`${groups}<div class="nav-spacer"></div><div class="nav-footer"><strong>${esc(currentUser.name)}</strong>${esc(currentUser.label)}<br>Workbook baseline: ${esc(stamp)}<br>v2.1 Real Data</div>`;
  $$('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view));
 }
 function navigate(v){view=v;$$('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));$('#nav').classList.remove('open');$('#navScrim')?.classList.remove('open');({dashboard,personnel,tasks,assess,actions,insights,audit:audits,settings}[v]||dashboard)()}
