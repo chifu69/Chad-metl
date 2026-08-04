@@ -49,7 +49,8 @@ async function init(){
     $('#loginBtn').addEventListener('click',login);
     $('#pin').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
     $('#logoutBtn').addEventListener('click',logout);
-    $('#menuBtn').addEventListener('click',()=>$('#nav').classList.toggle('open'));
+    $('#menuBtn').addEventListener('click',()=>{const open=!$('#nav').classList.contains('open');$('#nav').classList.toggle('open',open);$('#navScrim')?.classList.toggle('open',open)});
+    $('#navScrim').addEventListener('click',()=>{$('#nav').classList.remove('open');$('#navScrim').classList.remove('open')});
     $('#startupStatus').textContent=`Ready · ${state.personnel.length} personnel · ${state.tasks.filter(t=>t.status==='Active').length} tasks`;
     if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
   }catch(err){
@@ -85,13 +86,58 @@ function login(){
   navigate('dashboard');
 }
 function logout(){$('#app').classList.add('hidden');$('#login').classList.remove('hidden');currentUser=null}
-const navItems=[['dashboard','⌂ Dashboard'],['personnel','👥 Personnel'],['tasks','📋 METL Tasks'],['assess','✅ New Assessment'],['actions','⚠ Corrective Actions'],['insights','✦ AI Readiness'],['audit','🕒 Audit Trail'],['settings','⚙ Data & Export']];
+const iconSvg={
+ dashboard:'<svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-6h5v6"/></svg>',
+ personnel:'<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.4-4 2.2-6 5.5-6s5.1 2 5.5 6"/><circle cx="17" cy="9" r="2.3"/><path d="M15.5 14c3.2-.5 5 1.2 5.5 4"/></svg>',
+ tasks:'<svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2.5h6V4M8 9h8M8 13h8M8 17h5"/></svg>',
+ assess:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16.5 9"/></svg>',
+ actions:'<svg viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v5M12 17.5v.2"/></svg>',
+ insights:'<svg viewBox="0 0 24 24"><path d="M12 2.5 13.7 8l5.8 1.7-5.8 1.8L12 17l-1.7-5.5-5.8-1.8L10.3 8 12 2.5Z"/><path d="m18.5 15 .8 2.4 2.2.7-2.2.8-.8 2.3-.7-2.3-2.3-.8 2.3-.7.7-2.4Z"/></svg>',
+ audit:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+ settings:'<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="white"/><circle cx="15" cy="12" r="2" fill="white"/><circle cx="11" cy="18" r="2" fill="white"/></svg>'
+};
+const navItems=[
+ {group:'Overview',items:[['dashboard','Dashboard']]},
+ {group:'Operations',items:[['personnel','Personnel'],['tasks','METL Tasks'],['assess','New Assessment']]},
+ {group:'Quality & Intelligence',items:[['actions','Corrective Actions'],['insights','AI Readiness'],['audit','Audit Trail']]},
+ {group:'Administration',items:[['settings','Data & Export']]}
+];
 function allowed(id){if(currentUser.role==='associate')return ['dashboard','tasks','actions','insights'].includes(id);if(currentUser.role==='viewer')return id!=='assess'&&id!=='settings';if(currentUser.role==='evaluator')return id!=='settings';return true}
-function renderNav(){$('#nav').innerHTML=navItems.filter(([id])=>allowed(id)).map(([id,l])=>`<button data-view="${id}">${l}</button>`).join('');$$('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view))}
-function navigate(v){view=v;$$('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));$('#nav').classList.remove('open');({dashboard,personnel,tasks,assess,actions,insights,audit:audits,settings}[v]||dashboard)()}
+function renderNav(){
+ const groups=navItems.map(g=>{const items=g.items.filter(([id])=>allowed(id));if(!items.length)return '';return `<div class="nav-group">${g.group}</div>${items.map(([id,label])=>`<button class="nav-link" data-view="${id}">${iconSvg[id]}<span>${label}</span></button>`).join('')}`}).join('');
+ const stamp=state.meta?.generated||new Date().toISOString().slice(0,10);
+ $('#nav').innerHTML=`${groups}<div class="nav-spacer"></div><div class="nav-footer"><strong>${esc(currentUser.name)}</strong>${esc(currentUser.label)}<br>Workbook baseline: ${esc(stamp)}<br>v2.0 Enterprise</div>`;
+ $$('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view));
+}
+function navigate(v){view=v;$$('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));$('#nav').classList.remove('open');$('#navScrim')?.classList.remove('open');({dashboard,personnel,tasks,assess,actions,insights,audit:audits,settings}[v]||dashboard)()}
 function page(title,sub,body,actions=''){$('#main').innerHTML=`<div class="page-head"><div><h1>${title}</h1><p>${sub}</p></div><div class="actions">${actions}</div></div>${body}`}
 function personScope(){return currentUser.role==='associate'?state.personnel.filter(p=>p.employeeNumber===currentUser.employeeNumber):state.personnel}
-function dashboard(){const ppl=personScope();const active=ppl.filter(p=>p.status==='Active').length||ppl.length;const curr=state.results.filter(r=>r.recordStatus==='Current');const noGo=curr.filter(r=>r.result==='NO-GO').length;const critical=curr.filter(r=>r.result==='NO-GO'&&state.subtasks.find(s=>s.id===r.subtaskId)?.criticality==='Critical Gate').length;const open=state.actions.filter(a=>a.status!=='Closed').length;const shifts=['A','B','C','D'];let shiftRows=shifts.map(s=>{const n=state.personnel.filter(p=>p.shift===s&&p.name).length;const assessed=new Set(state.sessions.filter(x=>x.shift===s).map(x=>x.employeeNumber)).size;return `<tr><td>${s}</td><td>${n}</td><td>${assessed}</td><td>${n?Math.round(assessed/n*100):0}%</td></tr>`}).join('');page('Readiness Dashboard','Evidence-based overview from the workbook baseline and pilot activity',`<div class="grid kpis"><div class="card kpi"><span>Personnel in view</span><strong>${active}</strong></div><div class="card kpi"><span>Current NO-GO</span><strong>${noGo}</strong></div><div class="card kpi"><span>Critical Gate failures</span><strong>${critical}</strong></div><div class="card kpi"><span>Open actions</span><strong>${open}</strong></div></div><div class="grid two" style="margin-top:14px"><div class="card"><h3>Shift coverage</h3><div class="table-wrap"><table><thead><tr><th>Shift</th><th>Staff</th><th>Assessed</th><th>Coverage</th></tr></thead><tbody>${shiftRows}</tbody></table></div></div><div class="card"><h3>Qualification doctrine</h3><p><b>Trained:</b> all applicable critical gates GO and at least 90% standard subtasks GO.</p><p><b>Practiced:</b> at least 70% GO with no current critical NO-GO.</p><p><b>Untrained:</b> current critical NO-GO or below threshold.</p><p class="muted">Levels are cumulative from -10 through -40.</p></div></div>`)}
+function dashboard(){
+ const ppl=personScope();
+ const active=ppl.filter(p=>p.name&&p.status!=='Inactive').length;
+ const curr=state.results.filter(r=>r.recordStatus==='Current');
+ const noGo=curr.filter(r=>r.result==='NO-GO').length;
+ const critical=curr.filter(r=>r.result==='NO-GO'&&state.subtasks.find(s=>s.id===r.subtaskId)?.criticality==='Critical Gate').length;
+ const open=state.actions.filter(a=>a.status!=='Closed').length;
+ const assessed=new Set(state.sessions.map(x=>x.employeeNumber)).size;
+ const coverage=active?Math.round(assessed/active*100):0;
+ const activeTasks=state.tasks.filter(t=>t.status==='Active').length;
+ const criticalGates=state.subtasks.filter(s=>s.status==='Active'&&s.criticality==='Critical Gate').length;
+ const shifts=['A','B','C','D'];
+ const shiftRows=shifts.map(s=>{const roster=state.personnel.filter(p=>p.shift===s&&p.name&&p.status!=='Inactive').length;const done=new Set(state.sessions.filter(x=>x.shift===s).map(x=>x.employeeNumber)).size;const pct=roster?Math.min(100,Math.round(done/roster*100)):0;return `<tr><td><b>${s}</b></td><td>${roster}</td><td>${done}</td><td><div class="bar"><i style="width:${pct}%"></i></div><small>${pct}%</small></td></tr>`}).join('');
+ page('Readiness Dashboard','Live view of the imported competency workboard and local assessment activity',`
+ <div class="grid kpis">
+  <div class="card kpi"><span>Personnel roster</span><strong>${active}</strong><small>${state.evaluators.length} approved evaluators</small></div>
+  <div class="card kpi"><span>Assessment coverage</span><strong>${coverage}%</strong><small>${assessed} associates assessed</small></div>
+  <div class="card kpi"><span>Current NO-GO</span><strong>${noGo}</strong><small>${critical} critical-gate failures</small></div>
+  <div class="card kpi"><span>Open corrective actions</span><strong>${open}</strong><small>Require documented closure</small></div>
+ </div>
+ <div class="grid two" style="margin-top:14px">
+  <div class="card"><h3>Shift readiness coverage</h3><div class="table-wrap"><table><thead><tr><th>Shift</th><th>Roster</th><th>Assessed</th><th>Coverage</th></tr></thead><tbody>${shiftRows}</tbody></table></div></div>
+  <div class="card dashboard-highlight"><h3>Workbook baseline loaded</h3><p>The application contains the normalized data imported from the competency workboard.</p><div class="metric-row"><div><b>${activeTasks}</b><span>Active METL tasks</span></div><div><b>${state.subtasks.length}</b><span>Evaluation subtasks</span></div><div><b>${criticalGates}</b><span>Critical gates</span></div></div><p class="muted">Source: ${esc(state.meta?.sourceWorkbook||'K1 Extrusion METL workbook')}</p></div>
+ </div>
+ <div class="card" style="margin-top:14px"><h3>Qualification doctrine</h3><p><b>Trained:</b> all applicable critical gates GO and at least 90% standard subtasks GO. <b>Practiced:</b> at least 70% GO with no current critical NO-GO. <b>Untrained:</b> current critical NO-GO or below threshold.</p><p class="muted">Levels are cumulative from -10 through -40. Recommendations in AI Readiness are explainable and derived from assessment evidence.</p></div>`)
+}
 function personnel(){let data=personScope();page('Personnel','Master roster; identity should be maintained once',`<div class="filters"><input id="pSearch" placeholder="Search name or employee #"><select id="pShift"><option value="">All shifts</option>${['A','B','C','D'].map(x=>`<option>${x}</option>`).join('')}</select><select id="pRole"><option value="">All roles</option>${['Supervisor','Sr. Lead','Operator'].map(x=>`<option>${x}</option>`).join('')}</select></div><div id="ptable"></div>`,currentUser.role==='admin'?'<button class="primary" id="addPerson">Add person</button>':'');const draw=()=>{let q=$('#pSearch').value.toLowerCase(),sh=$('#pShift').value,ro=$('#pRole').value;let rows=data.filter(p=>(p.name+' '+p.employeeNumber).toLowerCase().includes(q)&&(!sh||p.shift===sh)&&(!ro||p.role===ro)).map(p=>`<tr><td>${esc(p.employeeNumber)}</td><td>${esc(p.name)}</td><td>${p.shift}</td><td>${p.role}</td><td><span class="pill ${String(p.status).toLowerCase()}">${p.status}</span></td><td>${p.assignedLevel}</td><td>${p.approvedLevel||'—'}</td></tr>`).join('');$('#ptable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Employee #</th><th>Name</th><th>Shift</th><th>Role</th><th>Status</th><th>Assigned</th><th>Approved</th></tr></thead><tbody>${rows}</tbody></table></div>`};['pSearch','pShift','pRole'].forEach(id=>$(`#${id}`).oninput=draw);draw();if($('#addPerson'))$('#addPerson').onclick=()=>personModal()}
 function personModal(){modal(`<h2>Add personnel record</h2><div class="form-grid"><label>Employee number<input id="mEmp"></label><label>Name<input id="mName"></label><label>Shift<select id="mShift">${['A','B','C','D'].map(x=>`<option>${x}</option>`)}</select></label><label>Role<select id="mRole">${['Operator','Sr. Lead','Supervisor'].map(x=>`<option>${x}</option>`)}</select></label><label>Assigned level<select id="mLevel">${Object.keys(levelRank).map(x=>`<option>${x}</option>`)}</select></label></div><div class="actions"><button class="primary" id="savePerson">Save</button><button class="secondary close">Cancel</button></div>`);$('#savePerson').onclick=()=>{if(!$('#mEmp').value||!$('#mName').value)return toast('Employee number and name required');state.personnel.push({employeeNumber:$('#mEmp').value,name:$('#mName').value,shift:$('#mShift').value,role:$('#mRole').value,assignedLevel:$('#mLevel').value,status:'Active'});audit('CREATE','Personnel',$('#mEmp').value,'Personnel record created');closeModal();personnel()}}
 function tasks(){let canEdit=currentUser.role==='admin';page('METL Tasks',`${state.tasks.length} tasks and ${state.subtasks.length} supporting subtasks imported from the workbook`,`<div class="filters"><input id="tSearch" placeholder="Search task"><select id="tLevel"><option value="">All levels</option>${Object.keys(levelRank).map(x=>`<option>${x}</option>`)}</select><select id="tDomain"><option value="">All domains</option>${[...new Set(state.tasks.map(t=>t.domain))].map(x=>`<option>${esc(x)}</option>`)}</select></div><div id="taskList" class="grid"></div>`,canEdit?'<button class="primary" id="newTask">New task</button>':'');const draw=()=>{let q=$('#tSearch').value.toLowerCase(),lv=$('#tLevel').value,dm=$('#tDomain').value;$('#taskList').innerHTML=state.tasks.filter(t=>(t.id+' '+t.name+' '+t.description).toLowerCase().includes(q)&&(!lv||t.requiredLevel===lv)&&(!dm||t.domain===dm)).map(t=>{let n=state.subtasks.filter(s=>s.taskId===t.id&&s.status==='Active').length,c=state.subtasks.filter(s=>s.taskId===t.id&&s.criticality==='Critical Gate').length;return `<div class="card"><div class="page-head"><div><h3>${t.id} — ${esc(t.name)}</h3><p>${esc(t.domain)} · ${t.requiredLevel} · Revision ${t.revision}</p></div><div class="actions"><button class="secondary detail" data-id="${t.id}">View</button>${canEdit?`<button class="secondary edit" data-id="${t.id}">Revise</button>`:''}</div></div><p>${esc(t.description)}</p><small>${n} subtasks · ${c} critical gates · recert ${t.recertMonths} months</small></div>`}).join('');$$('.detail').forEach(b=>b.onclick=()=>taskDetail(b.dataset.id));$$('.edit').forEach(b=>b.onclick=()=>taskEdit(b.dataset.id))};['tSearch','tLevel','tDomain'].forEach(id=>$(`#${id}`).oninput=draw);draw();if($('#newTask'))$('#newTask').onclick=()=>taskEdit()}

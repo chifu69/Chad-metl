@@ -40,3 +40,11 @@ This version is suitable for functional validation and representative-user testi
 - Falls back safely if the embedded baseline is unavailable.
 - Removes the dependency on `structuredClone` for older Safari/PWA compatibility.
 - Updates the service-worker cache so installed devices receive the corrected files.
+
+
+## Version 2.0 Enterprise
+- Grouped professional navigation with consistent SVG icons
+- Improved mobile drawer and backdrop behavior
+- Enhanced dashboard KPIs and shift coverage
+- Embedded workbook baseline: 24 personnel, 10 evaluators, 33 tasks, 468 subtasks
+- Existing local assessment, corrective action, audit, backup, and AI-readiness logic preserved
