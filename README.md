@@ -1,17 +1,13 @@
-# K1 Extrusion METL PWA v2.3 — Complete Workbook Import
+# K1 Extrusion METL v2.5 — Username Login Fix
 
-All deployment files are in the root for simple GitHub upload.
+Authorized usernames and temporary passwords:
 
-Imported from the workbook:
-- 40 personnel positions
-- 16 evaluators
-- 33 METL tasks
-- 468 observable subtasks (471 worksheet rows including title/instructions/header)
-- 40 Personnel Matrix records across 45 columns
-- assessment session/result baseline records
-- 23 source-register records
+- Administrator / Admin123
+- Kevin / Kevin123
+- Tony / Tony123
+- Dewayne / Dewayne123
+- Robert / Robert123
 
-Upload every file in this folder to the repository root. Do not upload the ZIP itself.
+Each user must replace the temporary password on first login. Password changes are stored locally in that browser/device.
 
-
-Version 2.4 adds restricted login for Administrator, Kevin, Tony, Dewayne, and Robert. Each temporary password must be changed on first sign-in.
+Upload every file in this folder directly to the root of the GitHub Pages repository. Replace the older files rather than mixing versions.
