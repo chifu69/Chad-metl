@@ -34,3 +34,11 @@
  .app main{padding:18px}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(max-width:600px){.app header strong{font-size:16px}.app header span{max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.metric-row{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}.kpi strong{font-size:25px}}
+.password-modal{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:24px;background:rgba(5,20,36,.78);backdrop-filter:blur(8px)}
+.password-modal.hidden{display:none}
+.password-card{width:min(520px,100%);background:#fff;border-radius:30px;padding:34px;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+.password-card h2{font-size:2rem;margin:18px 0 8px;color:#10233d}
+.password-card p{color:#687892;line-height:1.45;margin-bottom:22px}
+.password-card label{display:block;font-weight:800;color:#152844;margin:14px 0}
+.password-card input{width:100%;margin-top:8px;padding:16px;border:2px solid #ccd7e3;border-radius:16px;font:inherit;box-sizing:border-box}
+.brand-mark.small{width:68px;height:68px;font-size:1.6rem}

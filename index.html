@@ -17,10 +17,10 @@
       <h1>Extrusion METL</h1>
       <p>Competency Management System</p>
       <div id="startupStatus" class="startup-status">System ready</div>
-      <label>User profile<select id="profileSelect"></select></label>
-      <label>Demo PIN<input id="pin" inputmode="numeric" autocomplete="off" value="2468"></label>
+      <label>User<select id="profileSelect"></select></label>
+      <label>Password<input id="pin" type="password" autocomplete="current-password" placeholder="Enter password"></label>
       <button id="loginBtn" class="primary" type="button">Open Workboard</button>
-      <small>Local development authentication. Company SSO can be connected for production.</small>
+      <small>Only authorized supervisors and the administrator can sign in.</small>
     </section>
   </div>
 
@@ -32,6 +32,18 @@
     </header>
     <aside id="nav" aria-label="Main navigation"></aside><div id="navScrim" class="nav-scrim"></div>
     <main id="main"></main>
+  </div>
+
+  <div id="passwordModal" class="password-modal hidden" role="dialog" aria-modal="true" aria-labelledby="passwordTitle">
+    <section class="password-card">
+      <div class="brand-mark small">K1</div>
+      <h2 id="passwordTitle">Change your password</h2>
+      <p><strong id="changePasswordUser"></strong>, you must create a new password before entering.</p>
+      <label>New password<input id="newPassword" type="password" autocomplete="new-password" minlength="6"></label>
+      <label>Confirm password<input id="confirmPassword" type="password" autocomplete="new-password" minlength="6"></label>
+      <button id="changePasswordBtn" class="primary" type="button">Save password and continue</button>
+      <small>Use at least 6 characters. Do not reuse the temporary password.</small>
+    </section>
   </div>
 
   <div id="toast"></div>

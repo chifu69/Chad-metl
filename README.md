@@ -12,3 +12,6 @@ Imported from the workbook:
 - 23 source-register records
 
 Upload every file in this folder to the repository root. Do not upload the ZIP itself.
+
+
+Version 2.4 adds restricted login for Administrator, Kevin, Tony, Dewayne, and Robert. Each temporary password must be changed on first sign-in.
