@@ -1,49 +1,35 @@
-# K1 Extrusion METL Competency PWA — Pilot 0.1
+# K1 Extrusion METL — v1.0 AI-Ready
 
-This is a working offline-capable PWA pilot generated from `K1_Extrusion_METL_Competency_Workboard_Compatible.xlsx`.
+## Demo access
+- PIN: `2468`
+- Select Administrator, Evaluator, Associate, or Leadership.
 
-## Imported baseline
-- 24 populated personnel records
-- 10 approved evaluator records
-- 33 METL tasks
-- 468 supporting subtasks
-- Existing assessment-session baseline rows
+## What works
+- Embedded workbook baseline: 24 personnel, 10 evaluators, 33 METL tasks, 468 subtasks.
+- Role-specific navigation and read/write authority.
+- Personnel master records.
+- Versioned METL task revisions.
+- Assessment sessions with GO, NO-GO, NE, and Requires Assistance.
+- Critical Gate failures automatically block qualification and create corrective actions.
+- Corrective-action closure with audit history.
+- Readiness dashboards and explainable AI-readiness recommendations.
+- JSON backups, JSON restore, assessment CSV export, and AI-readiness CSV export.
+- Offline caching and PWA installation.
 
-## Pilot functions
-- Role-based screens for Administrator, Approved Evaluator, Associate, and Leadership viewer
-- Personnel roster and filters
-- Searchable METL task library
-- Task details with standards and Critical Gates
-- Controlled task revision workflow; old revisions are retained as Superseded
-- Evaluator-level enforcement (-10 through -40)
-- Assessment entry by applicable subtask
-- Automatic Critical Gate qualification block
-- Automatic corrective-action creation for NO-GO
-- Corrective-action closure with audit event
-- Local audit trail
-- Offline caching and installable PWA manifest
-- Full JSON export
+## GitHub Pages
+Upload the CONTENTS of this folder to the repository root, not the ZIP itself.
+In GitHub: Settings → Pages → Deploy from a branch → main / root.
 
-## Run locally
-A PWA must be served over HTTP/HTTPS, not opened directly as a file.
+After replacing an older installed version, delete the old Home Screen app or clear the website data once so the new service worker is installed.
 
-Windows:
-```
-python -m http.server 8080
-```
-Then open `http://localhost:8080` from inside this folder.
+## AI-ready design
+The current recommendations are generated locally by a transparent rules engine. The data model is normalized and can later connect to:
+- Microsoft Entra ID / company SSO
+- Dataverse, Azure SQL, PostgreSQL, or an approved company API
+- Azure OpenAI or another company-approved AI service
+- Power BI or embedded dashboards
 
-Demo PIN: `2468`
+No information is transmitted outside the device in this build.
 
-## Security limitation
-This ZIP is a functional pilot, not a production-secure deployment. The role selector and PIN demonstrate workflows only. Production should replace them with company Microsoft Entra ID login and server-side authorization.
-
-Recommended production backend:
-- Microsoft Entra ID authentication
-- Azure App Service or approved internal web hosting
-- Dataverse, Azure SQL, or another company-approved relational database
-- Azure Blob Storage or SharePoint for evidence attachments
-- Server-side audit and evaluator-authorization checks
-- Scheduled backups and retention policy
-
-Do not use local browser storage as the official competency record.
+## Production warning
+This version is suitable for functional validation and representative-user testing. Official production use requires corporate authentication, server-side authorization, centralized storage, backups, retention rules, and IT security approval.

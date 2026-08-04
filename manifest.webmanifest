@@ -1,1 +1,18 @@
-{"name":"K1 Extrusion METL Competency","short_name":"METL","start_url":"./","display":"standalone","background_color":"#f4f7fa","theme_color":"#0b1f35","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{
+  "name": "K1 Extrusion METL Competency Management",
+  "short_name": "Extrusion METL",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1f35",
+  "theme_color": "#0b1f35",
+  "description": "Extrusion competency, assessment, qualification, and readiness management.",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

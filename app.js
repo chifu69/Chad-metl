@@ -12,13 +12,54 @@ function esc(v=''){return String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt
 function toast(t){$('#toast').textContent=t;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),1800)}
 function save(){localStorage.setItem(storageKey,JSON.stringify(state))}
 function audit(action,entity,id,detail){state.audit.unshift({time:new Date().toISOString(),user:currentUser?.name||'System',action,entity,id,detail});save()}
-async function init(){profiles.forEach(p=>$('#profileSelect').add(new Option(p.label,p.id)));const saved=localStorage.getItem(storageKey);state=saved?JSON.parse(saved):await fetch('data/baseline.json').then(r=>r.json());$('#loginBtn').onclick=login;$('#logoutBtn').onclick=logout;$('#menuBtn').onclick=()=>$('#nav').classList.toggle('open');if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});}
-function login(){if($('#pin').value!=='2468')return toast('Incorrect demo PIN');currentUser=profiles.find(p=>p.id===$('#profileSelect').value);$('#login').classList.add('hidden');$('#app').classList.remove('hidden');$('#roleBadge').textContent=currentUser.label;renderNav();navigate('dashboard')}
+async function init(){
+  try{
+    profiles.forEach(p=>$('#profileSelect').add(new Option(p.label,p.id)));
+    const saved=localStorage.getItem(storageKey);
+    state=saved?JSON.parse(saved):structuredClone(window.METL_BASELINE);
+    normalizeState();
+    $('#loginBtn').addEventListener('click',login);
+    $('#pin').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
+    $('#logoutBtn').addEventListener('click',logout);
+    $('#menuBtn').addEventListener('click',()=>$('#nav').classList.toggle('open'));
+    $('#startupStatus').textContent=`Ready · ${state.personnel.length} personnel · ${state.tasks.filter(t=>t.status==='Active').length} tasks`;
+    if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  }catch(err){
+    console.error(err);
+    const s=$('#startupStatus');
+    if(s){s.textContent='Startup error: '+err.message;s.classList.add('error')}
+  }
+}
+function normalizeState(){
+  state.meta=state.meta||{};
+  state.meta.schemaVersion=state.meta.schemaVersion||'1.0';
+  state.meta.aiReady=true;
+  state.personnel=state.personnel||[];
+  state.evaluators=state.evaluators||[];
+  state.tasks=state.tasks||[];
+  state.subtasks=state.subtasks||[];
+  state.sessions=state.sessions||[];
+  state.results=state.results||[];
+  state.actions=state.actions||[];
+  state.audit=state.audit||[];
+  state.aiNotes=state.aiNotes||[];
+}
+function login(){
+  if($('#pin').value.trim()!=='2468')return toast('Incorrect demo PIN');
+  currentUser=profiles.find(p=>p.id===$('#profileSelect').value);
+  if(!currentUser)return toast('Select a user profile');
+  sessionStorage.setItem('k1-metl-profile',currentUser.id);
+  $('#login').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  $('#roleBadge').textContent=currentUser.label;
+  renderNav();
+  navigate('dashboard');
+}
 function logout(){$('#app').classList.add('hidden');$('#login').classList.remove('hidden');currentUser=null}
-const navItems=[['dashboard','⌂ Dashboard'],['personnel','👥 Personnel'],['tasks','📋 METL Tasks'],['assess','✅ New Assessment'],['actions','⚠ Corrective Actions'],['audit','🕒 Audit Trail'],['settings','⚙ Data & Export']];
-function allowed(id){if(currentUser.role==='associate')return ['dashboard','tasks','actions'].includes(id);if(currentUser.role==='viewer')return id!=='assess'&&id!=='settings';if(currentUser.role==='evaluator')return id!=='settings';return true}
+const navItems=[['dashboard','⌂ Dashboard'],['personnel','👥 Personnel'],['tasks','📋 METL Tasks'],['assess','✅ New Assessment'],['actions','⚠ Corrective Actions'],['insights','✦ AI Readiness'],['audit','🕒 Audit Trail'],['settings','⚙ Data & Export']];
+function allowed(id){if(currentUser.role==='associate')return ['dashboard','tasks','actions','insights'].includes(id);if(currentUser.role==='viewer')return id!=='assess'&&id!=='settings';if(currentUser.role==='evaluator')return id!=='settings';return true}
 function renderNav(){$('#nav').innerHTML=navItems.filter(([id])=>allowed(id)).map(([id,l])=>`<button data-view="${id}">${l}</button>`).join('');$$('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view))}
-function navigate(v){view=v;$$('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));$('#nav').classList.remove('open');({dashboard,personnel,tasks,assess,actions,audit:audits,settings}[v]||dashboard)()}
+function navigate(v){view=v;$$('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));$('#nav').classList.remove('open');({dashboard,personnel,tasks,assess,actions,insights,audit:audits,settings}[v]||dashboard)()}
 function page(title,sub,body,actions=''){$('#main').innerHTML=`<div class="page-head"><div><h1>${title}</h1><p>${sub}</p></div><div class="actions">${actions}</div></div>${body}`}
 function personScope(){return currentUser.role==='associate'?state.personnel.filter(p=>p.employeeNumber===currentUser.employeeNumber):state.personnel}
 function dashboard(){const ppl=personScope();const active=ppl.filter(p=>p.status==='Active').length||ppl.length;const curr=state.results.filter(r=>r.recordStatus==='Current');const noGo=curr.filter(r=>r.result==='NO-GO').length;const critical=curr.filter(r=>r.result==='NO-GO'&&state.subtasks.find(s=>s.id===r.subtaskId)?.criticality==='Critical Gate').length;const open=state.actions.filter(a=>a.status!=='Closed').length;const shifts=['A','B','C','D'];let shiftRows=shifts.map(s=>{const n=state.personnel.filter(p=>p.shift===s&&p.name).length;const assessed=new Set(state.sessions.filter(x=>x.shift===s).map(x=>x.employeeNumber)).size;return `<tr><td>${s}</td><td>${n}</td><td>${assessed}</td><td>${n?Math.round(assessed/n*100):0}%</td></tr>`}).join('');page('Readiness Dashboard','Evidence-based overview from the workbook baseline and pilot activity',`<div class="grid kpis"><div class="card kpi"><span>Personnel in view</span><strong>${active}</strong></div><div class="card kpi"><span>Current NO-GO</span><strong>${noGo}</strong></div><div class="card kpi"><span>Critical Gate failures</span><strong>${critical}</strong></div><div class="card kpi"><span>Open actions</span><strong>${open}</strong></div></div><div class="grid two" style="margin-top:14px"><div class="card"><h3>Shift coverage</h3><div class="table-wrap"><table><thead><tr><th>Shift</th><th>Staff</th><th>Assessed</th><th>Coverage</th></tr></thead><tbody>${shiftRows}</tbody></table></div></div><div class="card"><h3>Qualification doctrine</h3><p><b>Trained:</b> all applicable critical gates GO and at least 90% standard subtasks GO.</p><p><b>Practiced:</b> at least 70% GO with no current critical NO-GO.</p><p><b>Untrained:</b> current critical NO-GO or below threshold.</p><p class="muted">Levels are cumulative from -10 through -40.</p></div></div>`)}
@@ -32,7 +73,102 @@ function drawAssessment(){const emp=$('#aPerson').value,tid=$('#aTask').value;if
 function submitAssessment(){const emp=$('#aPerson').value,tid=$('#aTask').value,p=state.personnel.find(x=>x.employeeNumber===emp),t=state.tasks.find(x=>x.id===tid),sid='S-'+Date.now();let rows=$$('.subtask-eval').map(box=>({subtaskId:box.dataset.sub,result:box.querySelector('.r').value,observation:box.querySelector('.o').value}));let critFail=rows.some(r=>r.result==='NO-GO'&&state.subtasks.find(s=>s.id===r.subtaskId)?.criticality==='Critical Gate');state.sessions.push({id:sid,employeeNumber:emp,associateName:p.name,shift:p.shift,role:p.role,taskId:tid,taskName:t.name,date:new Date().toISOString().slice(0,10),evaluatorName:currentUser.name,method:$('#aMethod').value,status:'Closed',location:$('#aLine').value,finalStatus:critFail?'Unqualified':'Recorded'});rows.forEach(r=>{state.results.push({sessionId:sid,employeeNumber:emp,taskId:tid,...r,recordStatus:'Current',requiredLevel:state.subtasks.find(s=>s.id===r.subtaskId)?.requiredLevel});if(r.result==='NO-GO'){state.actions.push({id:'CA-'+Date.now()+'-'+r.subtaskId,employeeNumber:emp,employee:p.name,shift:p.shift,taskId:tid,subtaskId:r.subtaskId,criticality:state.subtasks.find(s=>s.id===r.subtaskId)?.criticality,observation:r.observation,status:'Open',owner:currentUser.name,targetDate:'',created:new Date().toISOString()})}});audit('SUBMIT','Assessment',sid,`${p.name} / ${tid}; critical failure=${critFail}`);toast(critFail?'Saved: qualification blocked by Critical Gate':'Assessment saved');dashboard()}
 function actions(){let acts=currentUser.role==='associate'?state.actions.filter(a=>a.employeeNumber===currentUser.employeeNumber):state.actions;page('Corrective Actions','NO-GO records are preserved; closure creates a separate audit event',`<div class="table-wrap"><table><thead><tr><th>ID</th><th>Associate</th><th>Task / Subtask</th><th>Criticality</th><th>Status</th><th>Owner</th><th></th></tr></thead><tbody>${acts.map(a=>`<tr><td>${a.id}</td><td>${esc(a.employee)}</td><td>${a.taskId}<br>${a.subtaskId}</td><td><span class="pill ${a.criticality==='Critical Gate'?'critical':'ne'}">${esc(a.criticality)}</span></td><td><span class="pill ${a.status==='Closed'?'go':'nogo'}">${a.status}</span></td><td>${esc(a.owner)}</td><td>${['admin','evaluator'].includes(currentUser.role)&&a.status!=='Closed'?`<button class="secondary closeAction" data-id="${a.id}">Close</button>`:''}</td></tr>`).join('')||'<tr><td colspan="7">No corrective actions.</td></tr>'}</tbody></table></div>`);$$('.closeAction').forEach(b=>b.onclick=()=>{let a=state.actions.find(x=>x.id===b.dataset.id);a.status='Closed';a.closedBy=currentUser.name;a.closedDate=new Date().toISOString();audit('CLOSE','Corrective Action',a.id,'Closed after competency demonstration');actions()})}
 function audits(){page('Audit Trail','Pilot record of create, revise, assess, and closure events',`<div class="table-wrap"><table><thead><tr><th>Date/time</th><th>User</th><th>Action</th><th>Entity</th><th>ID</th><th>Detail</th></tr></thead><tbody>${state.audit.map(a=>`<tr><td>${new Date(a.time).toLocaleString()}</td><td>${esc(a.user)}</td><td>${a.action}</td><td>${a.entity}</td><td>${a.id}</td><td>${esc(a.detail)}</td></tr>`).join('')||'<tr><td colspan="6">No pilot changes yet.</td></tr>'}</tbody></table></div>`)}
-function settings(){page('Data & Export','Local pilot controls. Production requires secured central storage and Microsoft Entra ID.',`<div class="grid two"><div class="card"><h3>Baseline data</h3><p>${state.personnel.length} personnel · ${state.evaluators.length} evaluators · ${state.tasks.length} task records · ${state.subtasks.length} subtasks</p><button class="secondary" id="exportJson">Export full JSON</button></div><div class="card"><h3>Reset pilot</h3><p>Removes local pilot changes and reloads the workbook baseline.</p><button class="danger" id="resetData">Reset local data</button></div></div>`);$('#exportJson').onclick=()=>download(JSON.stringify(state,null,2),'K1_METL_Pilot_Export.json','application/json');$('#resetData').onclick=async()=>{if(!confirm('Reset all local pilot changes?'))return;state=await fetch('data/baseline.json?x='+Date.now()).then(r=>r.json());save();toast('Pilot reset');dashboard()}}
+
+function qualificationSnapshot(person){
+  const applicable=state.subtasks.filter(s=>s.status==='Active'&&levelRank[s.requiredLevel]<=levelRank[person.assignedLevel]);
+  const latest=new Map();
+  state.results.filter(r=>r.employeeNumber===person.employeeNumber&&r.recordStatus==='Current').forEach(r=>latest.set(r.subtaskId,r));
+  let go=0,noGo=0,assist=0,criticalFail=0;
+  applicable.forEach(s=>{
+    const r=latest.get(s.id);
+    if(r?.result==='GO')go++;
+    if(r?.result==='NO-GO'){noGo++;if(s.criticality==='Critical Gate')criticalFail++}
+    if(r?.result==='REQUIRES ASSISTANCE')assist++;
+  });
+  const pct=applicable.length?Math.round(go/applicable.length*100):0;
+  return {applicable:applicable.length,go,noGo,assist,criticalFail,pct};
+}
+function buildInsights(){
+  return personScope().filter(p=>p.name&&p.status!=='Inactive').map(p=>{
+    const q=qualificationSnapshot(p);
+    const open=state.actions.filter(a=>a.employeeNumber===p.employeeNumber&&a.status!=='Closed').length;
+    let risk='Low',recommendation='Continue scheduled training and reassessment.';
+    if(q.criticalFail>0){risk='Critical';recommendation='Block independent performance and prioritize Critical Gate reassessment.'}
+    else if(open>0||q.noGo>0){risk='High';recommendation='Complete corrective actions and targeted retraining before qualification approval.'}
+    else if(q.pct<70){risk='Developing';recommendation='Increase coached repetitions on incomplete subtasks.'}
+    else if(q.pct>=90){risk='Ready';recommendation='Review remaining evidence and consider qualification-level advancement.'}
+    return {...p,...q,open,risk,recommendation};
+  }).sort((a,b)=>({Critical:5,High:4,Developing:3,Ready:2,Low:1}[b.risk]-({Critical:5,High:4,Developing:3,Ready:2,Low:1}[a.risk])));
+}
+function insights(){
+  const rows=buildInsights();
+  const cards=rows.map(x=>`<div class="card insight-card">
+    <div class="page-head"><div><h3>${esc(x.name)}</h3><p>${x.shift} Shift · ${x.role} · Assigned ${x.assignedLevel}</p></div><span class="pill risk-${x.risk.toLowerCase()}">${x.risk}</span></div>
+    <div class="progress"><span style="width:${x.pct}%"></span></div>
+    <p><b>${x.pct}%</b> of applicable subtasks currently GO · ${x.open} open actions · ${x.criticalFail} critical failures</p>
+    <p class="ai-recommendation"><b>Recommended next action:</b> ${esc(x.recommendation)}</p>
+  </div>`).join('');
+  page('AI Readiness','Explainable recommendations generated from assessment and corrective-action records',`
+    <div class="card ai-banner"><h3>AI-ready architecture</h3>
+    <p>This version uses a transparent rules engine. A secured corporate AI service can later analyze the same normalized records without changing the user interface or historical data model.</p></div>
+    <div class="grid">${cards||'<div class="card">No personnel records available.</div>'}</div>`,
+    '<button class="secondary" id="exportInsights">Export insights CSV</button>');
+  $('#exportInsights').onclick=()=>exportInsightsCsv(rows);
+}
+function exportInsightsCsv(rows=buildInsights()){
+  const headers=['Employee Number','Name','Shift','Role','Assigned Level','Applicable Subtasks','GO','NO-GO','Requires Assistance','Critical Failures','Open Actions','Readiness Percent','Risk','Recommendation'];
+  const vals=rows.map(x=>[x.employeeNumber,x.name,x.shift,x.role,x.assignedLevel,x.applicable,x.go,x.noGo,x.assist,x.criticalFail,x.open,x.pct,x.risk,x.recommendation]);
+  const csv=[headers,...vals].map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');
+  download(csv,'K1_METL_AI_Readiness.csv','text/csv');
+}
+function exportAssessmentCsv(){
+  const headers=['Session ID','Employee Number','Associate','Shift','Task ID','Task Name','Date','Evaluator','Method','Location','Final Status'];
+  const vals=state.sessions.map(s=>[s.id,s.employeeNumber,s.associateName,s.shift,s.taskId,s.taskName,s.date,s.evaluatorName,s.method,s.location,s.finalStatus]);
+  const csv=[headers,...vals].map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');
+  download(csv,'K1_METL_Assessment_Sessions.csv','text/csv');
+}
+
+function settings(){
+  page('Data, Backup & Integration','Administrative controls for portability, recovery, and future secured integrations.',`
+  <div class="grid two">
+    <div class="card"><h3>System data</h3>
+      <p>${state.personnel.length} personnel · ${state.evaluators.length} evaluators · ${state.tasks.length} task records · ${state.subtasks.length} subtasks</p>
+      <button class="secondary" id="exportJson">Export encrypted-ready JSON</button>
+      <button class="secondary" id="exportSessions">Export assessment CSV</button>
+      <button class="secondary" id="exportAI">Export AI readiness CSV</button>
+    </div>
+    <div class="card"><h3>Restore / migrate</h3>
+      <p>Import a previously exported JSON backup. Existing local records will be replaced after validation.</p>
+      <input id="importFile" type="file" accept=".json,application/json">
+      <button class="secondary" id="importJson">Import backup</button>
+    </div>
+    <div class="card"><h3>AI integration contract</h3>
+      <p>Normalized entities are ready for a secured API: personnel, tasks, subtasks, assessment sessions, results, actions, evaluator authority, and audit events.</p>
+      <p class="muted">No employee data is sent anywhere in this local version.</p>
+    </div>
+    <div class="card"><h3>Reset local application</h3>
+      <p>Removes local changes and restores the embedded workbook baseline.</p>
+      <button class="danger" id="resetData">Reset local data</button>
+    </div>
+  </div>`);
+  $('#exportJson').onclick=()=>download(JSON.stringify({...state,exportedAt:new Date().toISOString()},null,2),'K1_METL_Backup.json','application/json');
+  $('#exportSessions').onclick=exportAssessmentCsv;
+  $('#exportAI').onclick=()=>exportInsightsCsv();
+  $('#importJson').onclick=async()=>{
+    const f=$('#importFile').files[0]; if(!f)return toast('Choose a JSON backup first');
+    try{
+      const imported=JSON.parse(await f.text());
+      for(const key of ['personnel','tasks','subtasks','sessions','results','actions','audit'])if(!Array.isArray(imported[key]))throw new Error(`Missing ${key}`);
+      state=imported;normalizeState();save();audit('IMPORT','System','Backup','Validated JSON backup imported');toast('Backup imported');dashboard();
+    }catch(e){toast('Import failed: '+e.message)}
+  };
+  $('#resetData').onclick=()=>{
+    if(!confirm('Reset all local changes?'))return;
+    state=structuredClone(window.METL_BASELINE);normalizeState();save();toast('Baseline restored');dashboard();
+  };
+}
 function download(content,name,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();URL.revokeObjectURL(a.href)}
 function modal(html){document.body.insertAdjacentHTML('beforeend',`<div class="modal"><div class="modal-card">${html}</div></div>`);$$('.close').forEach(b=>b.onclick=closeModal)}function closeModal(){$('.modal')?.remove()}
 init();
+
+window.addEventListener('error',e=>{console.error(e.error||e.message);const s=document.querySelector('#startupStatus');if(s&&!document.querySelector('#login').classList.contains('hidden')){s.textContent='Error: '+e.message;s.classList.add('error')}});

@@ -1,4 +1,41 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b1f35"><title>K1 Extrusion METL</title><link rel="manifest" href="manifest.webmanifest"><link rel="stylesheet" href="styles.css"></head><body>
-<div id="login" class="login-shell"><section class="login-card"><div class="brand-mark">K1</div><h1>Extrusion METL</h1><p>Competency Management Pilot</p><label>User profile<select id="profileSelect"></select></label><label>Demo PIN<input id="pin" inputmode="numeric" value="2468"></label><button id="loginBtn" class="primary">Open Workboard</button><small>Pilot authentication only. Production deployment requires company SSO and a secured server.</small></section></div>
-<div id="app" class="app hidden"><header><button id="menuBtn" class="icon-btn">☰</button><div><strong>K1 Extrusion METL</strong><span id="roleBadge"></span></div><button id="logoutBtn" class="icon-btn">⎋</button></header><aside id="nav"></aside><main id="main"></main></div>
-<div id="toast"></div><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b1f35">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>K1 Extrusion METL</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="login" class="login-shell">
+    <section class="login-card">
+      <div class="brand-mark">K1</div>
+      <h1>Extrusion METL</h1>
+      <p>Competency Management System</p>
+      <div id="startupStatus" class="startup-status">System ready</div>
+      <label>User profile<select id="profileSelect"></select></label>
+      <label>Demo PIN<input id="pin" inputmode="numeric" autocomplete="off" value="2468"></label>
+      <button id="loginBtn" class="primary" type="button">Open Workboard</button>
+      <small>Local development authentication. Company SSO can be connected for production.</small>
+    </section>
+  </div>
+
+  <div id="app" class="app hidden">
+    <header>
+      <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
+      <div><strong>K1 Extrusion METL</strong><span id="roleBadge"></span></div>
+      <button id="logoutBtn" class="icon-btn" aria-label="Sign out">⎋</button>
+    </header>
+    <aside id="nav"></aside>
+    <main id="main"></main>
+  </div>
+
+  <div id="toast"></div>
+  <script src="data/baseline.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
