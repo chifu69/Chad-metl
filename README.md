@@ -1,58 +1,14 @@
-# K1 Extrusion METL — v1.0 AI-Ready
+# K1 Extrusion METL PWA v2.3 — Complete Workbook Import
 
-## Demo access
-- PIN: `2468`
-- Select Administrator, Evaluator, Associate, or Leadership.
+All deployment files are in the root for simple GitHub upload.
 
-## What works
-- Embedded workbook baseline: 24 personnel, 10 evaluators, 33 METL tasks, 468 subtasks.
-- Role-specific navigation and read/write authority.
-- Personnel master records.
-- Versioned METL task revisions.
-- Assessment sessions with GO, NO-GO, NE, and Requires Assistance.
-- Critical Gate failures automatically block qualification and create corrective actions.
-- Corrective-action closure with audit history.
-- Readiness dashboards and explainable AI-readiness recommendations.
-- JSON backups, JSON restore, assessment CSV export, and AI-readiness CSV export.
-- Offline caching and PWA installation.
+Imported from the workbook:
+- 40 personnel positions
+- 16 evaluators
+- 33 METL tasks
+- 468 observable subtasks (471 worksheet rows including title/instructions/header)
+- 40 Personnel Matrix records across 45 columns
+- assessment session/result baseline records
+- 23 source-register records
 
-## GitHub Pages
-Upload the CONTENTS of this folder to the repository root, not the ZIP itself.
-In GitHub: Settings → Pages → Deploy from a branch → main / root.
-
-After replacing an older installed version, delete the old Home Screen app or clear the website data once so the new service worker is installed.
-
-## AI-ready design
-The current recommendations are generated locally by a transparent rules engine. The data model is normalized and can later connect to:
-- Microsoft Entra ID / company SSO
-- Dataverse, Azure SQL, PostgreSQL, or an approved company API
-- Azure OpenAI or another company-approved AI service
-- Power BI or embedded dashboards
-
-No information is transmitted outside the device in this build.
-
-## Production warning
-This version is suitable for functional validation and representative-user testing. Official production use requires corporate authentication, server-side authorization, centralized storage, backups, retention rules, and IT security approval.
-
-
-## v1.0.1 startup-state fix
-- Recovers automatically from missing, invalid, or corrupted local state.
-- Falls back safely if the embedded baseline is unavailable.
-- Removes the dependency on `structuredClone` for older Safari/PWA compatibility.
-- Updates the service-worker cache so installed devices receive the corrected files.
-
-
-## Version 2.0 Enterprise
-- Grouped professional navigation with consistent SVG icons
-- Improved mobile drawer and backdrop behavior
-- Enhanced dashboard KPIs and shift coverage
-- Embedded workbook baseline: 24 personnel, 10 evaluators, 33 tasks, 468 subtasks
-- Existing local assessment, corrective action, audit, backup, and AI-readiness logic preserved
-
-
-## Version 2.1 — Real workforce data loaded
-- Personnel names and employee numbers are loaded from the supplied workbook.
-- Occupied roster positions are marked Active.
-- Unfilled roster slots remain Vacant.
-- A new local-storage key prevents older demonstration data from overriding this baseline.
-- Service-worker cache updated for installed devices.
+Upload every file in this folder to the repository root. Do not upload the ZIP itself.
