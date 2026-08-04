@@ -33,3 +33,10 @@ No information is transmitted outside the device in this build.
 
 ## Production warning
 This version is suitable for functional validation and representative-user testing. Official production use requires corporate authentication, server-side authorization, centralized storage, backups, retention rules, and IT security approval.
+
+
+## v1.0.1 startup-state fix
+- Recovers automatically from missing, invalid, or corrupted local state.
+- Falls back safely if the embedded baseline is unavailable.
+- Removes the dependency on `structuredClone` for older Safari/PWA compatibility.
+- Updates the service-worker cache so installed devices receive the corrected files.

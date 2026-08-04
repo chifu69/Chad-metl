@@ -10,14 +10,42 @@ let state,currentUser,view='dashboard';
 const storageKey='k1-metl-pilot-state-v01';
 function esc(v=''){return String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function toast(t){$('#toast').textContent=t;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),1800)}
-function save(){localStorage.setItem(storageKey,JSON.stringify(state))}
+function save(){
+  try{localStorage.setItem(storageKey,JSON.stringify(state))}
+  catch(err){console.warn('Unable to save local state',err)}
+}
 function audit(action,entity,id,detail){state.audit.unshift({time:new Date().toISOString(),user:currentUser?.name||'System',action,entity,id,detail});save()}
+function cloneData(value){
+  if(value==null)return null;
+  try{return JSON.parse(JSON.stringify(value))}catch(err){console.warn('Unable to clone baseline',err);return null}
+}
+function emptyState(){
+  return {
+    meta:{name:'K1 Extrusion METL Competency System',version:'Recovery',schemaVersion:'1.0',aiReady:true},
+    personnel:[],evaluators:[],tasks:[],subtasks:[],sessions:[],results:[],actions:[],audit:[],aiNotes:[]
+  };
+}
+function loadInitialState(){
+  const baseline=cloneData(window.METL_BASELINE);
+  const saved=localStorage.getItem(storageKey);
+  if(saved){
+    try{
+      const parsed=JSON.parse(saved);
+      if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed))return parsed;
+      console.warn('Saved METL state was not an object; restoring baseline');
+    }catch(err){
+      console.warn('Saved METL state was invalid; restoring baseline',err);
+      try{localStorage.removeItem(storageKey)}catch(_){}
+    }
+  }
+  return baseline&&typeof baseline==='object'?baseline:emptyState();
+}
 async function init(){
   try{
     profiles.forEach(p=>$('#profileSelect').add(new Option(p.label,p.id)));
-    const saved=localStorage.getItem(storageKey);
-    state=saved?JSON.parse(saved):structuredClone(window.METL_BASELINE);
+    state=loadInitialState();
     normalizeState();
+    save();
     $('#loginBtn').addEventListener('click',login);
     $('#pin').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
     $('#logoutBtn').addEventListener('click',logout);
@@ -31,7 +59,8 @@ async function init(){
   }
 }
 function normalizeState(){
-  state.meta=state.meta||{};
+  if(!state||typeof state!=='object'||Array.isArray(state))state=emptyState();
+  state.meta=(state.meta&&typeof state.meta==='object'&&!Array.isArray(state.meta))?state.meta:{};
   state.meta.schemaVersion=state.meta.schemaVersion||'1.0';
   state.meta.aiReady=true;
   state.personnel=state.personnel||[];
@@ -164,7 +193,7 @@ function settings(){
   };
   $('#resetData').onclick=()=>{
     if(!confirm('Reset all local changes?'))return;
-    state=structuredClone(window.METL_BASELINE);normalizeState();save();toast('Baseline restored');dashboard();
+    state=cloneData(window.METL_BASELINE)||emptyState();normalizeState();save();toast('Baseline restored');dashboard();
   };
 }
 function download(content,name,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();URL.revokeObjectURL(a.href)}
