@@ -14,3 +14,9 @@ Each account must change its temporary password on first use. Upload all files t
 
 ## METL Intelligence
 Offline, device-local readiness analysis, natural-language-style queries, coverage-risk detection, promotion screening, and evaluator observation drafting. No OpenAI connection, API key, subscription, or internet processing is used.
+
+
+## Version 3.2
+- Employee photo upload/camera option in Personnel Master.
+- Photos are compressed and stored locally with the employee record.
+- Administrator password reset once to Admin123 and requires a new password at sign-in.
