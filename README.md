@@ -1,22 +1,13 @@
-# K1 Extrusion METL v3.1
+# Extrusion METL PWA v3.3 — Search and Existing Photo Fix
 
-Controlled pilot competency-management PWA built from the workbook baseline.
+Changes in this release:
 
-Temporary credentials:
-- Administrator / Admin123
-- Kevin / Kevin123
-- Tony / Tony123
-- Dewayne / Dewayne123
-- Robert / Robert123
+- Employee search now supports exact and partial employee numbers.
+- First name, last name, full name, and position ID searches are normalized and case-insensitive.
+- Search updates on input, keyboard composition, search, change, and keyup events for iPhone Safari reliability.
+- Existing employees now show an **Add photo** or **Change photo** button in the Personnel list.
+- The existing Edit profile screen continues to support camera or photo-library upload, replacement, and removal.
+- Clear “No personnel found” message when filters have no match.
+- Updated service-worker cache version to prevent the older build from remaining active.
 
-Each account must change its temporary password on first use. Upload all files to the GitHub repository root. For enterprise deployment, replace local browser storage and pilot authentication with Microsoft Entra ID and Dataverse.
-
-
-## METL Intelligence
-Offline, device-local readiness analysis, natural-language-style queries, coverage-risk detection, promotion screening, and evaluator observation drafting. No OpenAI connection, API key, subscription, or internet processing is used.
-
-
-## Version 3.2
-- Employee photo upload/camera option in Personnel Master.
-- Photos are compressed and stored locally with the employee record.
-- Administrator password reset once to Admin123 and requires a new password at sign-in.
+Temporary administrator credentials remain unchanged from v3.2.
