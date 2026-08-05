@@ -1,4 +1,4 @@
-# RP IA v5.0.2 — Stable Startup Views Fix
+# RP IA v5.0.3 — Stable Startup Views Fix
 
 ## Local pilot access
 - Username: `Administrator`
@@ -31,7 +31,7 @@ This package prepares the PWA for company infrastructure, but the company must s
 - Updated the service-worker cache version.
 
 
-## v5.0.2 fix
+## v5.0.3 fix
 - Added the missing Audit Trail view.
 - Verified every startup navigation view has a defined handler.
-- Updated asset and service-worker cache versions to 5.0.2.
+- Updated asset and service-worker cache versions to 5.0.3.
