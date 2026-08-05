@@ -1,13 +1,15 @@
-# RP IA v4.2 — Adaptive Brain & User Management
+# RP IA v4.3 — Employee Lifecycle & Automatic Accounts
 
-This release adds:
-- RP Brain first, followed immediately by Ask RP Brain.
-- “Powered by RP IA” branding and removal of technical offline-service copy.
-- More natural English/Spanish questions with short-term conversation context.
-- Search-first Administration with compact employee cards and Edit User.
-- Existing employee photo add/change/remove.
-- Editable name, employee number, position, shift, level, status, language, account access and permissions.
-- Searchable Subtask Library with Add, Edit, Clone, Activate and Deactivate.
-- Responsive mobile/tablet/desktop layout.
+## New in this version
+- Adding a new employee automatically creates a read-only login account.
+- Username defaults to the employee number.
+- Temporary password defaults to `RP` + employee number.
+- First login requires a password change.
+- A success screen shows credentials and applicable task/subtask counts.
+- Employment status options: Active, Leave of Absence, Inactive, and Terminated.
+- Non-active employment statuses automatically block login while preserving history.
+- Administration can search and filter all employment statuses.
+- Administrators can add a new employee directly from User Management.
 
-Administrator temporary access remains Administrator / Admin123 unless already changed locally.
+## Important pilot limitation
+This GitHub Pages PWA stores users and data locally in each browser/device. Accounts created on one device are not automatically synchronized to other devices. A shared production deployment requires a central approved database and authentication service.
