@@ -1,7 +1,7 @@
 /* RP IA Enterprise Platform v8.0 — architecture and experience layer */
 (function(){
   'use strict';
-  const VERSION='9.1.0';
+  const VERSION='9.2.0';
   const $q=(s,r=document)=>r.querySelector(s);
   const $$q=(s,r=document)=>[...r.querySelectorAll(s)];
   const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
@@ -130,46 +130,65 @@
     const people=(state.personnel||[]).filter(p=>p.employeeNumber&&p.name&&p.status==='Active');
     const metrics=people.map(p=>({...p,...personMetrics(p)}));
     const readiness=metrics.length?Math.round(metrics.reduce((n,x)=>n+x.pct,0)/metrics.length):0;
-    const ready=metrics.filter(x=>x.pct===100&&!x.open&&!x.critical).length;
     const open=(state.actions||[]).filter(a=>a.status!=='Closed');
     const overdue=open.filter(a=>a.targetDate&&a.targetDate<today());
     const critical=(state.results||[]).filter(r=>r.criticality==='Critical Gate'&&r.result!=='GO'&&r.result!=='NOT EVALUATED');
     const due=(state.actions||[]).filter(a=>a.reassessmentDate&&a.reassessmentDate>=today()).slice(0,4);
-    const shifts=['A','B','C','D'].map(sh=>{const r=metrics.filter(x=>x.shift===sh);return{shift:sh,count:r.length,pct:r.length?Math.round(r.reduce((a,x)=>a+x.pct,0)/r.length):0,critical:r.reduce((a,x)=>a+x.critical,0)}});
-    const hour=new Date().getHours();const greeting=hour<12?'Good morning':hour<18?'Good afternoon':'Good evening';
-    const userName=escV(currentUser?.name||currentUser?.username||'Administrator');
+    const ready=metrics.filter(x=>x.pct===100&&!x.open&&!x.critical).length;
+    const shifts=['A','B','C','D'].map(sh=>{const r=metrics.filter(x=>x.shift===sh);return{shift:sh,count:r.length,pct:r.length?Math.round(r.reduce((a,x)=>a+x.pct,0)/r.length):0}});
     const weakest=[...shifts].filter(x=>x.count).sort((a,b)=>a.pct-b.pct)[0];
+    const hour=new Date().getHours(),greeting=hour<12?'Good morning':hour<18?'Good afternoon':'Good evening';
+    const userName=escV(currentUser?.name||currentUser?.username||'System Administrator');
     const missions=[];
-    if(overdue.length)missions.push({icon:'⚠️',text:`Review ${overdue.length} overdue corrective action${overdue.length===1?'':'s'}.`,target:'overdue'});
-    if(critical.length)missions.push({icon:'🔴',text:`Resolve ${critical.length} Critical Gate issue${critical.length===1?'':'s'}.`,target:'critical'});
-    if(weakest)missions.push({icon:'🎯',text:`Strengthen ${weakest.shift} Shift readiness, currently ${weakest.pct}%.`,target:'matrix'});
-    if(!missions.length)missions.push({icon:'✅',text:'No urgent compliance issues are recorded. Review upcoming assessments.',target:'assessments'});
+    if(critical.length)missions.push({tone:'red',icon:'!',title:`Resolve ${critical.length} Critical Gate issue${critical.length===1?'':'s'}`,detail:'Qualification and independent authorization may be blocked.',target:'critical'});
+    if(overdue.length)missions.push({tone:'amber',icon:'⏱',title:`Review ${overdue.length} overdue corrective action${overdue.length===1?'':'s'}`,detail:'Closure dates have passed and require attention.',target:'overdue'});
+    if(weakest)missions.push({tone:'blue',icon:'↗',title:`Strengthen ${weakest.shift} Shift readiness`,detail:`Current readiness is ${weakest.pct}%.`,target:'matrix'});
+    if(due.length)missions.push({tone:'violet',icon:'✓',title:`Complete ${due.length} upcoming reassessment${due.length===1?'':'s'}`,detail:'Keep qualifications current and traceable.',target:'assessments'});
+    if(!missions.length)missions.push({tone:'green',icon:'✓',title:'No urgent compliance issues',detail:'Review upcoming assessments and development opportunities.',target:'assessments'});
+    const status=critical.length||overdue.length?'Attention Required':readiness>=85?'Stable':'Developing';
+    const statusTone=critical.length?'red':overdue.length?'amber':readiness>=85?'green':'blue';
     page('Dashboard','',`
-      <section class="welcome-intelligence card"><div class="welcome-copy"><span class="eyebrow">Eagle AI operational briefing</span><h1>${greeting}, ${userName}.</h1><p>Welcome back. Eagle AI analyzed the current competency records and prepared today’s highest-impact work.</p></div><div class="briefing-summary" aria-label="Today's operational summary"><span class="eyebrow">Operational Summary</span><div class="briefing-metrics"><button data-briefing="readiness"><b>${readiness}%</b><small>Department readiness</small></button><button data-briefing="critical" class="danger"><b>${critical.length}</b><small>Critical Gate issues</small></button><button data-briefing="open" class="warning"><b>${open.length}</b><small>Open actions</small></button><button data-briefing="assessments"><b>${due.length}</b><small>Upcoming reassessments</small></button></div><div class="briefing-priority"><small>Highest priority</small><b>${escV(missions[0].text)}</b><button class="secondary" id="briefingOpenPriority">Open priority</button></div></div></section>
-      <section class="mission-card card"><div class="mission-head"><div><span class="eyebrow">Today's Mission</span><h2>Start with what matters most</h2></div><button class="primary" id="startMission">Start Today's Mission</button></div><div class="mission-list">${missions.slice(0,4).map((m,i)=>`<button class="mission-item" data-target="${m.target}"><b>${i+1}</b><span>${m.icon} ${escV(m.text)}</span><em>Open</em></button>`).join('')}</div></section>
-      <div class="dashboard-top-grid">
-        <section class="card readiness-master"><div class="dashboard-card-head"><div><span class="eyebrow">Plant Intelligence</span><h2>Readiness</h2></div><div class="readiness-ring" style="background:conic-gradient(var(--primary) 0 ${readiness}%,rgba(70,102,140,.14) ${readiness}% 100%)"><b>${readiness}%</b><span>Department</span></div></div><div class="shift-mini-grid">${shifts.map(s=>`<button class="shift-mini" data-shift="${s.shift}"><b>${s.shift}</b><span>${s.pct}%</span><small>${s.count} active</small></button>`).join('')}</div></section>
-        ${askBrainCard()}
+      <section class="command-hero ${statusTone}">
+        <div class="command-greeting"><span class="eyebrow">Eagle AI Operational Briefing</span><h1>${greeting}, ${userName}.</h1><p>Eagle AI reviewed the current competency records and selected the work with the highest operational impact.</p></div>
+        <div class="command-status"><small>Plant status</small><b>${status}</b><span>Last analysis ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span></div>
+      </section>
+      <section class="command-summary">
+        <button class="command-metric readiness" data-target="matrix"><span>Readiness</span><b>${readiness}%</b><em>${readiness>=85?'On track':'Needs development'}</em></button>
+        <button class="command-metric critical" data-target="critical"><span>Critical Gates</span><b>${critical.length}</b><em>${critical.length?'Urgent':'Clear'}</em></button>
+        <button class="command-metric actions" data-target="open"><span>Open Actions</span><b>${open.length}</b><em>${overdue.length?`${overdue.length} overdue`:'On schedule'}</em></button>
+        <button class="command-metric assessments" data-target="assessments"><span>Reassessments</span><b>${due.length}</b><em>Upcoming</em></button>
+        <button class="command-metric ready" data-target="ready"><span>Fully Ready</span><b>${ready}</b><em>Associates</em></button>
+      </section>
+      <section class="priority-command card ${missions[0].tone}"><div class="priority-icon">${missions[0].icon}</div><div><span class="eyebrow">Highest Priority</span><h2>${escV(missions[0].title)}</h2><p>${escV(missions[0].detail)}</p></div><button class="primary" id="commandResolve">Resolve Now</button></section>
+      <div class="command-grid">
+        <section class="card mission-command"><div class="section-title"><div><span class="eyebrow">Today's Mission</span><h2>Start with what matters most</h2></div><b>${missions.length} priorities</b></div><div class="mission-progress"><span style="width:0%"></span></div><div class="command-mission-list">${missions.slice(0,4).map((m,i)=>`<button data-target="${m.target}" class="command-mission ${m.tone}"><i>${m.icon}</i><span><b>${i+1}. ${escV(m.title)}</b><small>${escV(m.detail)}</small></span><em>Open →</em></button>`).join('')}</div></section>
+        <section class="card eagle-command"><span class="eyebrow">Ask Eagle AI</span><h2>Get an answer or open the exact record</h2><p>Search employees, qualifications, actions, tasks, and approved procedures.</p><div class="ask-row"><input id="dashBrainQuestion" placeholder="What does John Smith need to advance?"><button class="primary" id="dashAskBrain">Ask</button></div><div id="dashBrainAnswer" class="ai-answer">Eagle AI is ready.</div><button class="secondary" id="openFullBrain">Open full conversation</button></section>
       </div>
-      <div class="kpis clickable-kpis">
-        ${metricButton(people.length,'Active associates','','active')}
-        ${metricButton(ready,'Fully ready','good','ready')}
-        ${metricButton(open.length,'Open actions','warn','open')}
-        ${metricButton(overdue.length,'Overdue actions','bad','overdue')}
-        ${metricButton(critical.length,'Critical Gate issues','bad','critical')}
-      </div>
-      <div class="grid dashboard-detail-grid">
-        <section class="card"><h3>Priority attention</h3>${metrics.sort((a,b)=>b.critical-a.critical||b.open-a.open||a.pct-b.pct).slice(0,7).map(x=>`<button class="list-link dashPerson" data-emp="${x.employeeNumber}"><span><b>${escV(x.name)}</b><small>${x.shift} Shift · ${x.role} · ${x.assignedLevel}</small></span><span class="pill ${x.critical?'critical':x.open?'nogo':x.pct>=90?'go':'ne'}">${x.pct}%</span></button>`).join('')||'<p>No priority records.</p>'}</section>
-        <section class="card"><h3>Upcoming work</h3>${due.map(x=>`<button class="list-link" data-action="${x.id}"><span><b>${escV(x.associateName||x.employeeNumber||'Associate')}</b><small>${escV(x.reassessmentDate||'')} · ${escV(x.subtaskName||x.subtaskId||'Reassessment')}</small></span></button>`).join('')||'<p>No upcoming reassessments are recorded.</p>'}</section>
-        <section class="card full"><h3>Recent activity</h3>${(state.audit||[]).slice(0,6).map(a=>`<div class="activity-row"><span>${escV(a.action)} · ${escV(a.entity)}</span><small>${escV(a.user||'System')} · ${new Date(a.time).toLocaleString()}</small></div>`).join('')||'<p>No recent activity.</p>'}</section>
-      </div>`);
-    const run=()=>{const q=$q('#dashBrainQuestion').value.trim();if(!q)return;try{const r=RPBrainEnterprise.answer(q);$q('#dashBrainAnswer').innerHTML=r.html;RPBrainEnterprise.bind($q('#dashBrainAnswer'));const why=ReasoningEngine.explain(q,r);log('INFO','Eagle AI',`Question answered: ${q}`,why.summary)}catch(err){$q('#dashBrainAnswer').textContent='Eagle AI could not complete this request. Open Diagnostic Center for details.';log('ERROR','Eagle AI','Dashboard question failed',err.message)}};
+      <section class="card shift-command"><div class="section-title"><div><span class="eyebrow">Readiness by Shift</span><h2>Coverage at a glance</h2></div></div><div class="shift-bars">${shifts.map(s=>`<button data-shift="${s.shift}"><b>${s.shift} Shift</b><span><i style="width:${s.pct}%"></i></span><em>${s.pct}% · ${s.count} active</em></button>`).join('')}</div></section>`);
+    const openTarget=t=>{if(t==='ready')return navigate('personnel');if(t==='matrix'||t==='readiness')return navigate('matrix');if(t==='assessments')return navigate('assessments');if(['critical','open','overdue'].includes(t))return navigate('actions')};
+    $$q('[data-target]').forEach(b=>b.onclick=()=>openTarget(b.dataset.target));$q('#commandResolve').onclick=()=>openTarget(missions[0].target);
+    $$q('[data-shift]').forEach(b=>b.onclick=()=>{navigate('matrix');setTimeout(()=>{const el=$q('#mxShift');if(el){el.value=b.dataset.shift;el.dispatchEvent(new Event('change'))}},0)});
+    const run=()=>{const q=$q('#dashBrainQuestion').value.trim();if(!q)return;try{const r=RPBrainEnterprise.answer(q);$q('#dashBrainAnswer').innerHTML=r.html;RPBrainEnterprise.bind($q('#dashBrainAnswer'))}catch(err){$q('#dashBrainAnswer').textContent='Eagle AI could not complete this request.'}};
     $q('#dashAskBrain').onclick=run;$q('#dashBrainQuestion').onkeydown=e=>{if(e.key==='Enter')run()};$q('#openFullBrain').onclick=()=>openEaglePanel();
-    $$q('.dashPerson').forEach(b=>b.onclick=()=>personDetail(b.dataset.emp));$$q('[data-action]').forEach(b=>b.onclick=()=>actionDetail(b.dataset.action));
-    $$q('.shift-mini').forEach(b=>b.onclick=()=>{navigate('matrix');setTimeout(()=>{const el=$q('#mShift');if(el){el.value=b.dataset.shift;el.dispatchEvent(new Event('change'))}},0)});
-    const openTarget=t=>{if(t==='active'||t==='ready')return navigate('personnel');if(t==='matrix')return navigate('matrix');if(t==='assessments')return navigate('assessments');if(t==='critical'||t==='open'||t==='overdue')return navigate('actions')};
-    $$q('.metric-link,.mission-item').forEach(b=>b.onclick=()=>openTarget(b.dataset.metric||b.dataset.target));$q('#startMission').onclick=()=>openTarget(missions[0].target);$$q('[data-briefing]').forEach(b=>b.onclick=()=>openTarget(b.dataset.briefing));$q('#briefingOpenPriority').onclick=()=>openTarget(missions[0].target);
   };
+
+  window.personnel=function(){
+    page('Personnel Master','Search the central master record by employee number, name, shift, role, level, status, or qualified line',`<div class="filters"><input id="pSearch" type="text" inputmode="search" autocomplete="off" placeholder="Search name or employee #"><select id="pShift"><option value="">All shifts</option>${['A','B','C','D'].map(x=>`<option>${x}</option>`).join('')}</select><select id="pStatus"><option value="">All statuses</option><option>Active</option><option>Leave of Absence</option><option>Inactive</option><option>Terminated</option><option>Vacant</option></select></div><div id="pSearchMeta" class="search-meta"></div><div id="ptable"></div>`,canManagePersonnel()?'<button class="primary" id="addPerson">Add personnel</button>':'');
+    const clean=v=>String(v??'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9\- ]/g,' ').replace(/\s+/g,' ').trim().toLowerCase();
+    const digits=v=>String(v??'').replace(/[^0-9]/g,'');
+    const render=()=>{
+      const raw=$q('#pSearch').value||'',q=clean(raw),qd=digits(raw),sh=$q('#pShift').value,st=$q('#pStatus').value;
+      const source=[...(state.personnel||[])];
+      const scored=source.map(p=>{const emp=digits(p.employeeNumber),name=clean(p.name),fields=clean([p.employeeNumber,p.name,p.shift,p.role,p.assignedLevel,p.approvedLevel,p.status,p.qualifiedLines,p.positionId].join(' '));let score=0;if(!q&&!qd)score=1;else{if(qd&&emp===qd)score=1000;else if(qd&&emp.startsWith(qd))score=800;else if(qd&&emp.includes(qd))score=650;if(q&&name===q)score=Math.max(score,950);else if(q&&name.startsWith(q))score=Math.max(score,750);else if(q&&fields.includes(q))score=Math.max(score,500);const toks=q.split(' ').filter(Boolean);if(toks.length&&toks.every(t=>fields.includes(t)))score=Math.max(score,450)}return{p,score}}).filter(x=>x.score>0&&(!sh||String(x.p.shift)===sh)&&(!st||String(x.p.status)===st)).sort((a,b)=>b.score-a.score||String(a.p.employeeNumber).localeCompare(String(b.p.employeeNumber),undefined,{numeric:true}));
+      $q('#pSearchMeta').textContent=`${scored.length} result${scored.length===1?'':'s'}${raw?` for “${raw}”`:''}`;
+      const rows=scored.map(({p})=>`<tr><td>${employeePhoto(p,'employee-thumb')}</td><td>${esc(p.employeeNumber)}</td><td><button class="text-btn pd" data-emp="${esc(p.employeeNumber)}">${esc(p.name||p.positionId)}</button></td><td>${esc(p.shift)}</td><td>${esc(p.role)}</td><td><span class="pill ${String(p.status).toLowerCase()}">${esc(p.status)}</span></td><td>${esc(p.assignedLevel)}</td>${canManagePersonnel()?`<td><button class="secondary pe" data-pos="${esc(p.positionId)}">Edit</button></td>`:''}</tr>`).join('');
+      $q('#ptable').innerHTML=rows?`<div class="table-wrap"><table><thead><tr><th>Photo</th><th>Employee #</th><th>Name</th><th>Shift</th><th>Role</th><th>Status</th><th>Level</th>${canManagePersonnel()?'<th>Action</th>':''}</tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="card empty-state"><b>No personnel found</b><p>Check the full employee number or try part of the name.</p></div>';
+      $$q('.pd').forEach(b=>b.onclick=()=>personDetail(b.dataset.emp));$$q('.pe').forEach(b=>b.onclick=()=>personEdit(b.dataset.pos));
+    };
+    let raf=0;const schedule=()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(render)};
+    ['input','keyup','change','search','compositionend','paste'].forEach(ev=>$q('#pSearch').addEventListener(ev,schedule));$q('#pShift').onchange=render;$q('#pStatus').onchange=render;if($q('#addPerson'))$q('#addPerson').onclick=()=>personEdit();render();
+  };
+
 
   window.assessmentsUnifiedView=function(){
     const rows=[...(state.sessions||[])].sort((a,b)=>(b.date||'').localeCompare(a.date||''));

@@ -1,4 +1,4 @@
-# RP IA v9.1 — Eagle AI Operational & Navigation Fix
+# RP IA v9.2 — Eagle AI Operational & Navigation Fix
 
 This release removes the repeated right-side eagle from the operational briefing and replaces it with live operational metrics and the highest-priority action. It also hardens Personnel Master search and fixes Eagle AI deep links so employee profiles and related records open visibly after the assistant panel closes.
 
