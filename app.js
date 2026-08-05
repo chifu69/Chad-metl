@@ -39,7 +39,34 @@ function completeLogin(u){currentUser=u;uiLanguage=u.language||uiLanguage;applyL
 function logout(){currentUser=null;$('#serverConfigBtn')?.classList.add('hidden');$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#pin').value='';$('#username').focus()}
 const navDefs=[['dashboard','Dashboard','Inicio'],['intelligence','RP Brain','RP Brain'],['personnel','Personnel','Personal'],['tasks','METL & Subtasks','METL y subtareas'],['matrix','Readiness Matrix','Matriz de preparación'],['assess','Assessment','Evaluación'],['sessions','Assessment History','Historial de evaluaciones'],['actions','Corrective Actions','Acciones correctivas'],['notifications','Notifications','Notificaciones'],['audit','Audit Trail','Auditoría'],['profile','My Profile','Mi perfil'],['settings','Administration','Administración']];
 function renderNav(){const allowed=navDefs.filter(x=>{if(x[0]==='settings')return currentUser.role==='admin';if(x[0]==='assess')return canEvaluate();if(x[0]==='audit')return currentUser.role==='admin'||currentUser.role==='evaluator';return true});$('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP IA</strong>${uiLanguage==='es'?'Inteligencia local privada':'Private local intelligence'}</div>`;$$('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view))}
-function navigate(v){view=v;trackInterest(v,1);$$('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));$('#nav').classList.remove('open');$('#navScrim').classList.remove('open');({dashboard,intelligence:metlIntelligence,personnel,tasks,matrix:matrixView,assess,sessions:sessionHistory,actions,notifications:notificationView,audit:auditView,profile:myProfile,settings}[v]||dashboard)()}
+function navigate(v){
+  view=v;
+  trackInterest(v,1);
+  $$('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
+  $('#nav').classList.remove('open');
+  $('#navScrim').classList.remove('open');
+  const routes={
+    dashboard,
+    intelligence:metlIntelligence,
+    personnel,
+    tasks,
+    matrix:matrixView,
+    assess,
+    sessions:sessionHistory,
+    actions,
+    notifications:notificationView,
+    audit:auditView,
+    profile:myProfile,
+    settings
+  };
+  try{
+    (routes[v]||dashboard)();
+  }catch(err){
+    console.error('RP IA view error',v,err);
+    page('Unable to open this view','The rest of RP IA is still available.',`<div class="card"><h3>View error</h3><p>${esc(err?.message||'Unknown error')}</p><button class="primary" id="returnDashboard">Return to dashboard</button></div>`);
+    $('#returnDashboard').onclick=()=>navigate('dashboard');
+  }
+}
 function page(title,sub,body,acts=''){$('#main').innerHTML=`<div class="page-head"><div><h1>${title}</h1><p>${sub}</p></div><div class="actions">${acts}</div></div>${body}`}
 function activePeople(){return state.personnel.filter(p=>p.name&&p.employeeNumber&&p.status!=='Inactive')}
 function latestResults(emp=null){const map=new Map();state.results.filter(r=>!emp||r.employeeNumber===emp).forEach(r=>{const key=r.employeeNumber+'|'+r.subtaskId,old=map.get(key);const d=r.date||state.sessions.find(s=>s.id===r.sessionId)?.date||'';if(!old||d>old._date)map.set(key,{...r,_date:d})});return map}
@@ -71,6 +98,22 @@ function sessionDetail(id){const s=state.sessions.find(x=>x.id===id),rows=state.
 function actions(){const rows=[...state.actions].sort((a,b)=>(a.status==='Closed')-(b.status==='Closed')||(a.targetDate||'').localeCompare(b.targetDate||''));page('Corrective Actions & Reassessment','Original failed assessments remain unchanged; closure requires demonstrated competency',`<div class="filters"><select id="caStatus"><option value="">All statuses</option><option>Open</option><option>Closed</option></select><input id="caSearch" placeholder="Search associate or task"></div><div id="caTable"></div>`);const draw=()=>{const st=$('#caStatus').value,q=$('#caSearch').value.toLowerCase(),f=rows.filter(a=>(!st||a.status===st)&&(a.employee+' '+a.taskId+' '+a.subtaskId).toLowerCase().includes(q));$('#caTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Associate</th><th>Task / Subtask</th><th>Due</th><th>Criticality</th><th>Status</th><th>Owner</th><th></th></tr></thead><tbody>${f.map(a=>`<tr><td>${esc(a.employee)}</td><td>${a.taskId} / ${a.subtaskId}</td><td class="${a.status!=='Closed'&&a.targetDate&&a.targetDate<today()?'overdue':''}">${esc(a.targetDate)}</td><td><span class="pill ${a.criticality==='Critical Gate'?'critical':'ne'}">${esc(a.criticality)}</span></td><td>${a.status}</td><td>${esc(a.responsibleTrainer||a.owner)}</td><td><button class="secondary cav" data-id="${a.id}">Open</button></td></tr>`).join('')||'<tr><td colspan="7">No corrective actions.</td></tr>'}</tbody></table></div>`;$$('.cav').forEach(b=>b.onclick=()=>actionDetail(b.dataset.id))};$('#caStatus').oninput=draw;$('#caSearch').oninput=draw;draw()}
 function actionDetail(id){const a=state.actions.find(x=>x.id===id);modal(`<h2>Corrective Action ${a.id}</h2><div class="form-grid"><label>Associate<input value="${esc(a.employee)}" readonly></label><label>Task / Subtask<input value="${a.taskId} / ${a.subtaskId}" readonly></label><label class="full">Standard not met<textarea id="caStd">${esc(a.standardNotMet||a.observation)}</textarea></label><label class="full">Immediate coaching<textarea id="caCoach">${esc(a.immediateCoaching)}</textarea></label><label class="full">Required retraining<textarea id="caTrain">${esc(a.requiredRetraining)}</textarea></label><label>Responsible trainer<input id="caOwner" value="${esc(a.responsibleTrainer||a.owner)}"></label><label>Target completion<input id="caDue" type="date" value="${esc(a.targetDate)}"></label><label>Reassessment date<input id="caRe" type="date" value="${esc(a.reassessmentDate)}"></label><label>Reassessment result<select id="caResult"><option></option>${['GO','NO-GO','REQUIRES ASSISTANCE'].map(x=>`<option ${a.reassessmentResult===x?'selected':''}>${x}</option>`).join('')}</select></label></div><div class="actions"><button class="primary" id="saveCA">Save</button>${a.status!=='Closed'?'<button class="secondary" id="closeCA">Close after demonstrated competency</button>':''}<button class="secondary close">Cancel</button></div>`);$('#saveCA').onclick=()=>{const old=clone(a);Object.assign(a,{standardNotMet:$('#caStd').value,immediateCoaching:$('#caCoach').value,requiredRetraining:$('#caTrain').value,responsibleTrainer:$('#caOwner').value,targetDate:$('#caDue').value,reassessmentDate:$('#caRe').value,reassessmentResult:$('#caResult').value});audit('UPDATE','Corrective Action',a.id,'Action plan updated',old,a);closeModal();actions()};if($('#closeCA'))$('#closeCA').onclick=()=>{if($('#caResult').value!=='GO')return toast('A GO reassessment is required before closure');const old=clone(a);Object.assign(a,{reassessmentResult:'GO',status:'Closed',closureDate:new Date().toISOString(),closedBy:currentUser.name,closureAuthority:currentUser.maxLevel});audit('CLOSE','Corrective Action',a.id,'Closed after GO reassessment',old,a);closeModal();actions()}}
 function buildNotifications(){const n=[],now=today();for(const a of state.actions)if(a.status!=='Closed'){if(a.targetDate&&a.targetDate<now)n.push({type:'Overdue Corrective Action',severity:'high',text:`${a.employee} — ${a.taskId}/${a.subtaskId} was due ${a.targetDate}`});else n.push({type:'Open Corrective Action',severity:a.criticality==='Critical Gate'?'high':'medium',text:`${a.employee} — ${a.taskId}/${a.subtaskId}`})}for(const s of state.sessions)if(s.reassessmentDate&&s.reassessmentDate<=new Date(Date.now()+state.settings.reassessmentWarningDays*86400000).toISOString().slice(0,10))n.push({type:'Reassessment Due',severity:s.reassessmentDate<now?'high':'medium',text:`${s.associateName} — ${s.taskId} due ${s.reassessmentDate}`});return n}
+function notificationView(){
+  const items=buildNotifications();
+  const high=items.filter(n=>n.severity==='high').length;
+  const medium=items.filter(n=>n.severity==='medium').length;
+  page(
+    uiLanguage==='es'?'Notificaciones':'Notifications',
+    uiLanguage==='es'?'Acciones, reevaluaciones y alertas que requieren atención':'Corrective actions, reassessments, and alerts requiring attention',
+    `<div class="kpis"><div class="kpi bad"><b>${high}</b><span>${uiLanguage==='es'?'Alta prioridad':'High priority'}</span></div><div class="kpi warn"><b>${medium}</b><span>${uiLanguage==='es'?'Próximas':'Upcoming'}</span></div><div class="kpi"><b>${items.length}</b><span>${uiLanguage==='es'?'Total':'Total'}</span></div></div><div class="card"><h3>${uiLanguage==='es'?'Centro de notificaciones':'Notification center'}</h3>${items.length?items.map((n,i)=>`<button class="list-link notificationItem" data-index="${i}"><span><b>${esc(n.type)}</b><small>${esc(n.text)}</small></span><span class="pill ${n.severity==='high'?'critical':'ne'}">${n.severity==='high'?(uiLanguage==='es'?'Urgente':'Urgent'):(uiLanguage==='es'?'Próxima':'Upcoming')}</span></button>`).join(''):`<div class="empty-state"><b>${uiLanguage==='es'?'Todo al día':'All caught up'}</b><p>${uiLanguage==='es'?'No hay alertas activas en este momento.':'There are no active alerts right now.'}</p></div>`}</div>`
+  );
+  $$('.notificationItem').forEach(btn=>btn.onclick=()=>{
+    const n=items[Number(btn.dataset.index)];
+    if(n?.type.includes('Corrective')) navigate('actions');
+    else if(n?.type.includes('Reassessment')) navigate('sessions');
+  });
+}
+
 
 function aiShiftSummary(shift){const people=activePeople().filter(p=>!shift||p.shift===shift),m=people.map(p=>({...p,...personMetrics(p)}));const avg=m.length?Math.round(m.reduce((a,x)=>a+x.pct,0)/m.length):0;const open=m.reduce((a,x)=>a+x.open,0),critical=m.reduce((a,x)=>a+x.critical,0);const top=[...m].sort((a,b)=>b.pct-a.pct).slice(0,3),risk=[...m].sort((a,b)=>b.critical-a.critical||b.open-a.open||a.pct-b.pct).slice(0,4);return{people:m,avg,open,critical,top,risk}}
 function aiGapRows(emp){const p=state.personnel.find(x=>x.employeeNumber===emp);if(!p)return[];const latest=latestResults(emp);return state.subtasks.filter(x=>x.status==='Active'&&levelRank[x.requiredLevel]<=levelRank[p.assignedLevel]).map(x=>({s:x,r:latest.get(emp+'|'+x.id)})).filter(x=>x.r?.result!=='GO').sort((a,b)=>(b.s.criticality==='Critical Gate')-(a.s.criticality==='Critical Gate')||levelRank[a.s.requiredLevel]-levelRank[b.s.requiredLevel])}
@@ -99,4 +142,4 @@ function exportAudit(){const h=['Date Time','User','Action','Entity','ID','Detai
 function restoreBackup(e){const f=e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const obj=JSON.parse(reader.result);state=normalize(obj);audit('RESTORE','System','backup','JSON backup restored');toast('Backup restored');dashboard()}catch{toast('Invalid backup file')}};reader.readAsText(f)}
 function modal(html){document.body.insertAdjacentHTML('beforeend',`<div class="modal"><div class="modal-card">${html}</div></div>`);$$('.close').forEach(b=>b.onclick=closeModal)} function closeModal(){$('.modal')?.remove()}
 $('#langEn').onclick=()=>applyLanguage('en');$('#langEs').onclick=()=>applyLanguage('es');applyLanguage(uiLanguage,false);$('#loginBtn').onclick=login;$('#pin').onkeydown=e=>{if(e.key==='Enter')login()};$('#changePasswordBtn').onclick=changePassword;$('#profileBtn').onclick=()=>navigate('profile');$('#openServerSetup').onclick=()=>window.RpiaServerSetup.open();$('#serverConfigBtn').onclick=()=>window.RpiaServerSetup.open();$('#logoutBtn').onclick=logout;$('#menuBtn').onclick=()=>{$('#nav').classList.toggle('open');$('#navScrim').classList.toggle('open')};$('#navScrim').onclick=()=>{$('#nav').classList.remove('open');$('#navScrim').classList.remove('open')};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=5.0.0').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=5.0.1').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});

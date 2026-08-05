@@ -1,4 +1,4 @@
-# RP IA v5.0 — Enterprise-Ready Pilot
+# RP IA v5.0.1 — Stable Login & Notifications Fix
 
 ## Local pilot access
 - Username: `Administrator`
@@ -23,3 +23,9 @@ See `ENTERPRISE-API-SPEC.md` for the server contract.
 
 ## Important
 This package prepares the PWA for company infrastructure, but the company must still provide the API, database, HTTPS certificate, authentication, permissions, backup, and retention controls. In Local mode, records remain specific to the browser/device.
+
+
+## v5.0.1 fix
+- Restored the missing Notifications view.
+- Added guarded navigation so a secondary view error cannot disable Sign In or the whole app.
+- Updated the service-worker cache version.
