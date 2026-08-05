@@ -145,3 +145,8 @@ html,body{max-width:100%;overflow-x:hidden}
   .modal-card{padding:15px;border-radius:18px}
   #toast{left:12px;right:12px;bottom:12px;text-align:center}
 }
+
+/* RP IA v4.2 management and intelligence refinements */
+.library-tabs{display:flex;gap:.6rem;margin-bottom:1rem;overflow:auto}.tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:.75rem 1rem;font-weight:800;color:var(--muted);white-space:nowrap}.tab.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.subtask-library{display:grid;gap:1rem}.subtask-card h3{margin:.25rem 0}.brain-ask-first{margin:1rem 0 1.2rem}.admin-search{margin-bottom:1rem}.admin-user-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:1rem;margin-bottom:1.2rem}.admin-user-card{display:grid;grid-template-columns:auto 1fr;gap:1rem;align-items:center;background:#fff;border:1px solid var(--line);border-radius:24px;padding:1rem;box-shadow:var(--shadow)}.admin-user-card>.actions{grid-column:1/-1}.admin-user-main h3{margin:0}.admin-user-main p{margin:.25rem 0;color:var(--muted)}.user-meta{display:flex;flex-wrap:wrap;gap:.4rem}.user-meta span{background:var(--soft);border-radius:999px;padding:.35rem .65rem;font-size:.82rem;font-weight:750}.user-edit-hero{display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--soft);border-radius:20px;margin-bottom:1rem}.admin-lower{margin-top:1rem}
+@media(max-width:620px){.admin-user-grid{grid-template-columns:1fr}.admin-user-card{grid-template-columns:auto 1fr}.admin-user-card .actions{display:grid;grid-template-columns:1fr 1fr}.user-edit-hero{align-items:flex-start;flex-direction:column}.library-tabs{margin-top:.25rem}}
