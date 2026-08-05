@@ -1,15 +1,25 @@
-# RP IA v4.3 — Employee Lifecycle & Automatic Accounts
+# RP IA v5.0 — Enterprise-Ready Pilot
 
-## New in this version
-- Adding a new employee automatically creates a read-only login account.
-- Username defaults to the employee number.
-- Temporary password defaults to `RP` + employee number.
-- First login requires a password change.
-- A success screen shows credentials and applicable task/subtask counts.
-- Employment status options: Active, Leave of Absence, Inactive, and Terminated.
-- Non-active employment statuses automatically block login while preserving history.
-- Administration can search and filter all employment statuses.
-- Administrators can add a new employee directly from User Management.
+## Local pilot access
+- Username: `Administrator`
+- Temporary password: `Admin123`
 
-## Important pilot limitation
-This GitHub Pages PWA stores users and data locally in each browser/device. Accounts created on one device are not automatically synchronized to other devices. A shared production deployment requires a central approved database and authentication service.
+The first login requires a password change.
+
+## Server configuration
+Use **IT / Server Setup** on the login screen or the server icon after an administrator signs in.
+
+IT can select:
+- Local / Test / Production environment
+- Local device or Company Server storage
+- API address
+- Local, company, or Microsoft Entra ID authentication mode
+- File storage and backup addresses
+- Microsoft tenant and client IDs
+
+The **Test Connection** button calls `GET /health`. The **Migrate local pilot data** button sends the local records to `POST /migration/import`.
+
+See `ENTERPRISE-API-SPEC.md` for the server contract.
+
+## Important
+This package prepares the PWA for company infrastructure, but the company must still provide the API, database, HTTPS certificate, authentication, permissions, backup, and retention controls. In Local mode, records remain specific to the browser/device.

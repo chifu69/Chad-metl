@@ -1,1 +1,17 @@
-{"name":"RP IA — Intelligent Competency & Training Platform","short_name":"RP IA","start_url":"./","display":"standalone","background_color":"#071426","theme_color":"#071426","description":"Offline competency, training, assessment, and local intelligence platform.","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{
+  "name": "RP IA \u2014 Intelligent Competency & Training Platform",
+  "short_name": "RP IA",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#071426",
+  "theme_color": "#071426",
+  "description": "Enterprise-ready competency and training platform",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
