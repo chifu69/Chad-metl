@@ -1,7 +1,7 @@
 /* RP IA Enterprise Platform v8.0 — architecture and experience layer */
 (function(){
   'use strict';
-  const VERSION='9.0.0';
+  const VERSION='9.1.0';
   const $q=(s,r=document)=>r.querySelector(s);
   const $$q=(s,r=document)=>[...r.querySelectorAll(s)];
   const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
@@ -121,7 +121,7 @@
   };
 
   function askBrainCard(){
-    return `<section class="card dashboard-brain"><div class="dashboard-card-head"><div><span class="ai-badge">Powered by RP IA</span><h2>Ask Eagle AI</h2></div><span class="brain-orb"><img src="icon-192.png" alt="Eagle AI" class="eagle-mini"</span></div><p>Ask about readiness, employees, tasks, corrective actions, qualifications, or approved procedures.</p><div class="ask-row compact"><input id="dashBrainQuestion" placeholder="Example: What does John Smith need to advance?"><button class="primary" id="dashAskBrain">Ask</button></div><div id="dashBrainAnswer" class="ai-answer compact-answer">Ask a question or open the full conversation.</div><div class="actions"><button class="secondary" id="openFullBrain">Open full conversation</button></div></section>`;
+    return `<section class="card dashboard-brain"><div class="dashboard-card-head"><div><span class="ai-badge">Powered by RP IA</span><h2>Ask Eagle AI</h2></div><span class="brain-orb"><img src="icon-192.png" alt="Eagle AI" class="eagle-mini"></span></div><p>Ask about readiness, employees, tasks, corrective actions, qualifications, or approved procedures.</p><div class="ask-row compact"><input id="dashBrainQuestion" placeholder="Example: What does John Smith need to advance?"><button class="primary" id="dashAskBrain">Ask</button></div><div id="dashBrainAnswer" class="ai-answer compact-answer">Ask a question or open the full conversation.</div><div class="actions"><button class="secondary" id="openFullBrain">Open full conversation</button></div></section>`;
   }
 
   function metricButton(value,label,cls,target){return `<button class="kpi metric-link ${cls||''}" data-metric="${target}"><b>${value}</b><span>${label}</span></button>`}
@@ -145,7 +145,7 @@
     if(weakest)missions.push({icon:'🎯',text:`Strengthen ${weakest.shift} Shift readiness, currently ${weakest.pct}%.`,target:'matrix'});
     if(!missions.length)missions.push({icon:'✅',text:'No urgent compliance issues are recorded. Review upcoming assessments.',target:'assessments'});
     page('Dashboard','',`
-      <section class="welcome-intelligence card"><div class="welcome-copy"><span class="eyebrow">Eagle AI operational briefing</span><h1>${greeting}, ${userName}.</h1><p>Welcome back. Eagle AI analyzed the current competency records and prepared today’s highest-impact work.</p></div><img src="icon-192.png" alt="Eagle AI" class="welcome-eagle"></section>
+      <section class="welcome-intelligence card"><div class="welcome-copy"><span class="eyebrow">Eagle AI operational briefing</span><h1>${greeting}, ${userName}.</h1><p>Welcome back. Eagle AI analyzed the current competency records and prepared today’s highest-impact work.</p></div><div class="briefing-summary" aria-label="Today's operational summary"><span class="eyebrow">Operational Summary</span><div class="briefing-metrics"><button data-briefing="readiness"><b>${readiness}%</b><small>Department readiness</small></button><button data-briefing="critical" class="danger"><b>${critical.length}</b><small>Critical Gate issues</small></button><button data-briefing="open" class="warning"><b>${open.length}</b><small>Open actions</small></button><button data-briefing="assessments"><b>${due.length}</b><small>Upcoming reassessments</small></button></div><div class="briefing-priority"><small>Highest priority</small><b>${escV(missions[0].text)}</b><button class="secondary" id="briefingOpenPriority">Open priority</button></div></div></section>
       <section class="mission-card card"><div class="mission-head"><div><span class="eyebrow">Today's Mission</span><h2>Start with what matters most</h2></div><button class="primary" id="startMission">Start Today's Mission</button></div><div class="mission-list">${missions.slice(0,4).map((m,i)=>`<button class="mission-item" data-target="${m.target}"><b>${i+1}</b><span>${m.icon} ${escV(m.text)}</span><em>Open</em></button>`).join('')}</div></section>
       <div class="dashboard-top-grid">
         <section class="card readiness-master"><div class="dashboard-card-head"><div><span class="eyebrow">Plant Intelligence</span><h2>Readiness</h2></div><div class="readiness-ring" style="background:conic-gradient(var(--primary) 0 ${readiness}%,rgba(70,102,140,.14) ${readiness}% 100%)"><b>${readiness}%</b><span>Department</span></div></div><div class="shift-mini-grid">${shifts.map(s=>`<button class="shift-mini" data-shift="${s.shift}"><b>${s.shift}</b><span>${s.pct}%</span><small>${s.count} active</small></button>`).join('')}</div></section>
@@ -168,7 +168,7 @@
     $$q('.dashPerson').forEach(b=>b.onclick=()=>personDetail(b.dataset.emp));$$q('[data-action]').forEach(b=>b.onclick=()=>actionDetail(b.dataset.action));
     $$q('.shift-mini').forEach(b=>b.onclick=()=>{navigate('matrix');setTimeout(()=>{const el=$q('#mShift');if(el){el.value=b.dataset.shift;el.dispatchEvent(new Event('change'))}},0)});
     const openTarget=t=>{if(t==='active'||t==='ready')return navigate('personnel');if(t==='matrix')return navigate('matrix');if(t==='assessments')return navigate('assessments');if(t==='critical'||t==='open'||t==='overdue')return navigate('actions')};
-    $$q('.metric-link,.mission-item').forEach(b=>b.onclick=()=>openTarget(b.dataset.metric||b.dataset.target));$q('#startMission').onclick=()=>openTarget(missions[0].target);
+    $$q('.metric-link,.mission-item').forEach(b=>b.onclick=()=>openTarget(b.dataset.metric||b.dataset.target));$q('#startMission').onclick=()=>openTarget(missions[0].target);$$q('[data-briefing]').forEach(b=>b.onclick=()=>openTarget(b.dataset.briefing));$q('#briefingOpenPriority').onclick=()=>openTarget(missions[0].target);
   };
 
   window.assessmentsUnifiedView=function(){
@@ -217,7 +217,7 @@
   window.openEaglePanel=function(){
     let panel=$q('#eagleAssistantPanel');if(!panel){panel=document.createElement('aside');panel.id='eagleAssistantPanel';panel.className='eagle-assistant-panel';document.body.appendChild(panel)}
     panel.innerHTML=`<div class="eagle-panel-head"><div><img src="icon-192.png" alt="Eagle AI"><span><b>Ask Eagle AI</b><small>Context: ${escV(currentContext())}</small></span></div><button id="closeEaglePanel" class="icon-btn">✕</button></div><div id="eagleMessages" class="eagle-messages">${eagleConversation.map(m=>`<div class="eagle-msg ${m.role}">${m.html}</div>`).join('')||'<div class="eagle-msg assistant">How can I help you with this screen?</div>'}</div><div class="eagle-compose"><input id="eagleQuestion" placeholder="Ask anything about your operation..."><button class="primary" id="sendEagleQuestion">Ask</button></div>`;
-    panel.classList.add('open');$q('#closeEaglePanel').onclick=()=>panel.classList.remove('open');
+    panel.classList.add('open');window.closeEaglePanel=()=>panel.classList.remove('open');$q('#closeEaglePanel').onclick=window.closeEaglePanel;
     const send=()=>{const input=$q('#eagleQuestion'),q=input.value.trim();if(!q)return;eagleConversation.push({role:'user',html:escV(q)});let html;try{const r=RPBrainEnterprise.answer(q);html=r.html;const why=ReasoningEngine.explain(q,r);html+=`<details class="reasoning-summary"><summary>Why this answer?</summary><p>${escV(why.summary)}</p></details>`;log('INFO','Eagle AI',`Question answered in ${currentContext()}`,why.summary)}catch(err){html=`Eagle AI could not complete this request. ${escV(err.message||'')}`;log('ERROR','Eagle AI','Floating assistant failed',err.message)}eagleConversation.push({role:'assistant',html});openEaglePanel();setTimeout(()=>{$q('#eagleMessages').scrollTop=$q('#eagleMessages').scrollHeight},0)};
     $q('#sendEagleQuestion').onclick=send;$q('#eagleQuestion').onkeydown=e=>{if(e.key==='Enter')send()};setTimeout(()=>$q('#eagleQuestion')?.focus(),50)
   };
