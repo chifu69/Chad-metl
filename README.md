@@ -1,17 +1,12 @@
-# RP IA v6.1 — Engines Foundation
+# RP IA v8.0 — Enterprise Platform Architecture
 
-Major update built on the stable v5.0.3 pilot.
+This release reorganizes RP IA into three layers: User Modules, Enterprise Modules, and 20 invisible Core Engines coordinated by Ask RP Brain.
 
-## New
-- Seven-engine architecture and Engine Center.
-- Unified Search Engine, including exact/partial employee-number search in Readiness Matrix.
-- Rules/data-quality diagnostics.
-- Knowledge article foundation.
-- Workflow and predictive foundations.
-- Audit events routed through Audit Engine.
-- Server-ready engine contracts.
+## Administrator login
+- Username: Administrator
+- Temporary password: Admin123
 
-## Login
-Administrator / Admin123 (unless changed in this browser previously).
+## Important
+This remains an advanced local pilot. Server mode requires a compatible API, database, authentication, HTTPS, and company approval.
 
-Upload every file from this ZIP to the repository root. Do not mix versions.
+Upload every file in this ZIP together. Do not mix files from prior versions. Safari/PWA caches are versioned to v8.0.0.

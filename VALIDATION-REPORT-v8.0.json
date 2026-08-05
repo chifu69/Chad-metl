@@ -1,0 +1,36 @@
+{
+  "version": "8.0.0",
+  "engine_count": 20,
+  "engines": [
+    "RP Brain",
+    "Natural Language Engine",
+    "Reasoning Engine",
+    "Workflow Engine",
+    "Rules Engine",
+    "Knowledge Engine",
+    "Search Engine",
+    "Predictive Engine",
+    "Audit Engine",
+    "Competency Coach Engine",
+    "Experience Engine",
+    "Evidence Engine",
+    "Certification Engine",
+    "Readiness Integrity Engine",
+    "Data Quality Engine",
+    "Training Effectiveness Engine",
+    "Coverage Resilience Engine",
+    "Recertification Engine",
+    "Permission Assurance Engine",
+    "Dependency & Impact Engine"
+  ],
+  "checks": {
+    "dashboard_integrates_readiness_and_brain": true,
+    "assessments_unified": true,
+    "engine_center_removed_from_user_nav": true,
+    "diagnostic_center_admin_only": true,
+    "export_dashboard_removed": true,
+    "generic_examples": true,
+    "reasoning_engine": true,
+    "service_worker_v8": true
+  }
+}
