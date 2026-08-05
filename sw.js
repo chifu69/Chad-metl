@@ -1,4 +1,4 @@
-const CACHE='rp-ia-v9.2.0-operational-navigation-fix';
+const CACHE='rp-ia-v9.3.0-search-navigation-hard-fix';
 const ASSETS=['./','./index.html','./styles.css','./icon.svg','./manifest.webmanifest','./config.js','./local-adapter.js','./server-adapter.js','./data-service.js','./server-setup.js','./engine-core.js','./app.js','./enterprise-engines.js','./platform-v9.js'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
