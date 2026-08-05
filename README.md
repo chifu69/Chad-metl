@@ -1,4 +1,4 @@
-# RP IA v5.0.1 — Stable Login & Notifications Fix
+# RP IA v5.0.2 — Stable Startup Views Fix
 
 ## Local pilot access
 - Username: `Administrator`
@@ -29,3 +29,9 @@ This package prepares the PWA for company infrastructure, but the company must s
 - Restored the missing Notifications view.
 - Added guarded navigation so a secondary view error cannot disable Sign In or the whole app.
 - Updated the service-worker cache version.
+
+
+## v5.0.2 fix
+- Added the missing Audit Trail view.
+- Verified every startup navigation view has a defined handler.
+- Updated asset and service-worker cache versions to 5.0.2.

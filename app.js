@@ -115,6 +115,34 @@ function notificationView(){
 }
 
 
+
+function auditView(){
+  const rows=[...(state.audit||[])];
+  page(
+    uiLanguage==='es'?'Registro de auditoría':'Audit Trail',
+    uiLanguage==='es'?'Historial preservado de cambios, accesos y acciones administrativas':'Preserved history of changes, access, and administrative actions',
+    `<div class="filters"><input id="auditSearch" type="search" placeholder="${uiLanguage==='es'?'Buscar usuario, entidad o detalle':'Search user, entity, or detail'}"><select id="auditAction"><option value="">${uiLanguage==='es'?'Todas las acciones':'All actions'}</option>${[...new Set(rows.map(r=>r.action).filter(Boolean))].sort().map(x=>`<option>${esc(x)}</option>`).join('')}</select></div><div id="auditTable"></div>`,
+    `<button class="secondary" id="exportAudit">${uiLanguage==='es'?'Exportar auditoría CSV':'Export audit CSV'}</button>`
+  );
+  const draw=()=>{
+    const q=String($('#auditSearch').value||'').toLowerCase().trim();
+    const action=$('#auditAction').value;
+    const filtered=rows.filter(r=>{
+      const hay=[r.time,r.user,r.action,r.entity,r.id,r.detail].map(v=>String(v||'')).join(' ').toLowerCase();
+      return(!q||hay.includes(q))&&(!action||r.action===action);
+    });
+    $('#auditTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>${uiLanguage==='es'?'Fecha y hora':'Date & time'}</th><th>${uiLanguage==='es'?'Usuario':'User'}</th><th>${uiLanguage==='es'?'Acción':'Action'}</th><th>${uiLanguage==='es'?'Entidad':'Entity'}</th><th>ID</th><th>${uiLanguage==='es'?'Detalle':'Detail'}</th></tr></thead><tbody>${filtered.map(r=>`<tr><td>${esc(r.time||'')}</td><td>${esc(r.user||'System')}</td><td><span class="pill ne">${esc(r.action||'')}</span></td><td>${esc(r.entity||'')}</td><td>${esc(r.id||'')}</td><td>${esc(r.detail||'')}</td></tr>`).join('')||`<tr><td colspan="6">${uiLanguage==='es'?'No hay registros de auditoría.':'No audit records found.'}</td></tr>`}</tbody></table></div>`;
+  };
+  $('#auditSearch').oninput=draw;
+  $('#auditAction').onchange=draw;
+  draw();
+  $('#exportAudit').onclick=()=>{
+    const header=['Time','User','Action','Entity','ID','Detail','Before','After'];
+    const data=[header,...rows.map(r=>[r.time,r.user,r.action,r.entity,r.id,r.detail,JSON.stringify(r.before??''),JSON.stringify(r.after??'')])];
+    download(csv(data),`RP-IA-audit-${today()}.csv`);
+  };
+}
+
 function aiShiftSummary(shift){const people=activePeople().filter(p=>!shift||p.shift===shift),m=people.map(p=>({...p,...personMetrics(p)}));const avg=m.length?Math.round(m.reduce((a,x)=>a+x.pct,0)/m.length):0;const open=m.reduce((a,x)=>a+x.open,0),critical=m.reduce((a,x)=>a+x.critical,0);const top=[...m].sort((a,b)=>b.pct-a.pct).slice(0,3),risk=[...m].sort((a,b)=>b.critical-a.critical||b.open-a.open||a.pct-b.pct).slice(0,4);return{people:m,avg,open,critical,top,risk}}
 function aiGapRows(emp){const p=state.personnel.find(x=>x.employeeNumber===emp);if(!p)return[];const latest=latestResults(emp);return state.subtasks.filter(x=>x.status==='Active'&&levelRank[x.requiredLevel]<=levelRank[p.assignedLevel]).map(x=>({s:x,r:latest.get(emp+'|'+x.id)})).filter(x=>x.r?.result!=='GO').sort((a,b)=>(b.s.criticality==='Critical Gate')-(a.s.criticality==='Critical Gate')||levelRank[a.s.requiredLevel]-levelRank[b.s.requiredLevel])}
 function aiPersonNarrative(p){const m=personMetrics(p),g=aiGapRows(p.employeeNumber),crit=g.filter(x=>x.s.criticality==='Critical Gate'),due=state.actions.filter(a=>a.employeeNumber===p.employeeNumber&&a.status!=='Closed');const next={'-10':'-20','-20':'-30','-30':'-40','-40':'-40'}[p.assignedLevel]||'-10';let status=m.critical?'Not authorized for affected critical work':m.open?'Developing — corrective action open':m.pct===100?'Ready at assigned level':m.pct>=80?'Near qualification':'Training in progress';let rec=crit.length?`Reassess critical gate ${crit[0].s.id} before independent performance.`:due.length?`Complete ${due.length} open corrective action${due.length===1?'':'s'} before qualification review.`:g.length?`Prioritize ${g.slice(0,3).map(x=>x.s.id).join(', ')} next.`:`Review readiness for advancement toward ${next}.`;return{m,g,crit,due,status,rec}}
@@ -142,4 +170,4 @@ function exportAudit(){const h=['Date Time','User','Action','Entity','ID','Detai
 function restoreBackup(e){const f=e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const obj=JSON.parse(reader.result);state=normalize(obj);audit('RESTORE','System','backup','JSON backup restored');toast('Backup restored');dashboard()}catch{toast('Invalid backup file')}};reader.readAsText(f)}
 function modal(html){document.body.insertAdjacentHTML('beforeend',`<div class="modal"><div class="modal-card">${html}</div></div>`);$$('.close').forEach(b=>b.onclick=closeModal)} function closeModal(){$('.modal')?.remove()}
 $('#langEn').onclick=()=>applyLanguage('en');$('#langEs').onclick=()=>applyLanguage('es');applyLanguage(uiLanguage,false);$('#loginBtn').onclick=login;$('#pin').onkeydown=e=>{if(e.key==='Enter')login()};$('#changePasswordBtn').onclick=changePassword;$('#profileBtn').onclick=()=>navigate('profile');$('#openServerSetup').onclick=()=>window.RpiaServerSetup.open();$('#serverConfigBtn').onclick=()=>window.RpiaServerSetup.open();$('#logoutBtn').onclick=logout;$('#menuBtn').onclick=()=>{$('#nav').classList.toggle('open');$('#navScrim').classList.toggle('open')};$('#navScrim').onclick=()=>{$('#nav').classList.remove('open');$('#navScrim').classList.remove('open')};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=5.0.1').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=5.0.2').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});
