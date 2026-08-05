@@ -71,3 +71,77 @@ body{background:radial-gradient(circle at 85% -10%,#c8e8ff 0,transparent 30%),li
 .app main{padding:28px}.page-head h1{font-size:30px;letter-spacing:-.035em}.card,.kpi,.table-wrap{border:1px solid rgba(205,219,233,.8);box-shadow:var(--shadow);backdrop-filter:blur(12px)}.card{border-radius:20px}.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}.kpi{background:linear-gradient(145deg,#fff,#f6faff);border-radius:20px;padding:18px}.kpi b{font-size:31px;letter-spacing:-.04em}.progress,.bar{height:11px;background:#e6edf5;border-radius:99px;overflow:hidden}.progress span,.bar i{background:linear-gradient(90deg,#2f8cff,#725cff)!important}.secondary{border-radius:12px;background:#fff}.filters{background:rgba(255,255,255,.78);padding:12px;border:1px solid var(--line);border-radius:18px;box-shadow:0 9px 26px rgba(7,20,38,.06)}input,select,textarea{border-radius:13px;background:#fbfdff;min-height:44px}table{border-radius:18px;overflow:hidden}.employee-thumb{width:42px;height:42px;border-radius:14px;object-fit:cover}.employee-photo-large{width:108px;height:108px;border-radius:28px;object-fit:cover;box-shadow:0 14px 30px #07142624}.photo-placeholder{display:grid;place-items:center;background:linear-gradient(135deg,#dceeff,#e8e5ff);color:#285c97;font-weight:800}.person-profile{display:flex;align-items:center;gap:18px;background:linear-gradient(135deg,#fff,#eff7ff);padding:18px;border-radius:22px;border:1px solid var(--line);box-shadow:var(--shadow);margin-bottom:15px}.brain-hero{background:linear-gradient(135deg,#0b2544,#173d72 55%,#4c3fae);color:white;border:0;overflow:hidden;position:relative}.brain-hero:after{content:"🦅";position:absolute;right:22px;top:10px;font-size:82px;opacity:.12}.brain-chip{display:inline-flex;padding:6px 10px;border-radius:999px;background:#ffffff1f;font-size:12px;font-weight:750}.recommendation-list{display:grid;gap:10px}.recommendation{padding:13px;border-radius:14px;background:#f5f9fd;border:1px solid #e0eaf4}.profile-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.profile-grid .full{grid-column:1/-1}
 @media(max-width:900px){.app main{padding:18px}.app aside{top:72px;height:calc(100vh - 72px)}.nav-scrim{inset:72px 0 0}.profile-grid{grid-template-columns:1fr}}
 @media(max-width:600px){.login-card{padding:24px;border-radius:25px}.login-card h1{font-size:28px}.app main{padding:13px}.page-head h1{font-size:25px}.language-choice{grid-template-columns:1fr 1fr}.filters{grid-template-columns:1fr}.table-wrap{box-shadow:none}.person-profile{align-items:flex-start}.employee-photo-large{width:86px;height:86px;border-radius:22px}}
+
+/* RP IA 4.1 — Adaptive layout repair
+   These rules intentionally come last so the mobile/tablet grid cannot be
+   overridden by the desktop visual-system declarations above. */
+html,body{max-width:100%;overflow-x:hidden}
+.app{width:100%;max-width:100%}
+.app main{width:100%;max-width:100%;min-width:0}
+
+@media (max-width: 900px){
+  .app{
+    display:grid;
+    grid-template-columns:minmax(0,1fr)!important;
+    grid-template-rows:72px minmax(0,1fr)!important;
+  }
+  .app header{
+    grid-column:1!important;
+    grid-row:1!important;
+    width:100%;
+    min-width:0;
+  }
+  .app aside{
+    position:fixed!important;
+    grid-column:auto!important;
+    grid-row:auto!important;
+  }
+  .app main{
+    grid-column:1!important;
+    grid-row:2!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    margin:0!important;
+    overflow-x:hidden;
+  }
+  .page-head,.actions,.grid,.kpis,.two,.filters,.profile-grid{
+    min-width:0;
+    max-width:100%;
+  }
+  .card,.kpi,.table-wrap,.brain-hero{min-width:0;max-width:100%}
+}
+
+@media (min-width: 601px) and (max-width: 900px){
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .two{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .filters{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+
+@media (max-width: 600px){
+  .app header{padding-inline:10px;gap:6px}
+  .top-brand{min-width:0;gap:8px!important}
+  .top-brand img{width:38px;height:38px;flex:0 0 auto}
+  .top-brand>div{min-width:0}
+  .top-brand strong{display:block;white-space:nowrap}
+  .app header span{display:block;max-width:116px!important}
+  .header-actions{gap:0!important;flex:0 0 auto}
+  .icon-btn{padding:7px;font-size:22px}
+  .app main{padding:12px!important}
+  .page-head{gap:10px;margin-bottom:14px}
+  .page-head h1{font-size:clamp(24px,8vw,31px);line-height:1.02;overflow-wrap:anywhere}
+  .page-head p{font-size:14px;line-height:1.45}
+  .actions{width:100%}
+  .actions>*{flex:1 1 100%;width:100%}
+  .kpis,.two,.filters,.form-grid,.profile-grid{
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+  .kpi{padding:16px}
+  .brain-hero{padding:18px}
+  .brain-hero h2{font-size:clamp(24px,8vw,34px);overflow-wrap:anywhere}
+  .brain-hero p{overflow-wrap:anywhere}
+  .table-wrap{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .modal{padding:10px}
+  .modal-card{padding:15px;border-radius:18px}
+  #toast{left:12px;right:12px;bottom:12px;text-align:center}
+}

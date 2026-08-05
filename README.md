@@ -1,4 +1,4 @@
-# RP IA 4.0 — Intelligent Competency & Training Platform
+# RP IA 4.1 — Intelligent Competency & Training Platform
 
 ## Main pilot accounts
 - Administrator / `Admin123`
@@ -32,3 +32,7 @@ Example: employee 392 uses username `392` and temporary password `RP392`.
 
 ## Important pilot limitation
 Data, passwords, photos, and RP Brain learning are stored in the browser on the current device. Enterprise deployment requires company authentication and centralized storage.
+
+
+## v4.1 adaptive layout fix
+The dashboard now uses a single-column mobile grid, a two-column tablet layout, and the full desktop workspace without horizontal overflow.
