@@ -1,18 +1,1 @@
-{
-  "name": "K1 Extrusion METL Competency Management",
-  "short_name": "Extrusion METL",
-  "start_url": "./",
-  "scope": "./",
-  "display": "standalone",
-  "background_color": "#0b1f35",
-  "theme_color": "#0b1f35",
-  "description": "Extrusion competency, assessment, qualification, and readiness management.",
-  "icons": [
-    {
-      "src": "icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
-  ]
-}
+{"name":"RP IA — Intelligent Competency & Training Platform","short_name":"RP IA","start_url":"./","display":"standalone","background_color":"#071426","theme_color":"#071426","description":"Offline competency, training, assessment, and local intelligence platform.","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
