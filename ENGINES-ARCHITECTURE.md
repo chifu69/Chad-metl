@@ -1,4 +1,4 @@
-# RP IA v6.0 Engine Architecture
+# RP IA v6.1 Engine Architecture
 
 This release introduces seven local-first, server-ready engines:
 

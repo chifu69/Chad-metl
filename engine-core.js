@@ -86,3 +86,88 @@
     ask:(s,q,metricsFn)=>{const k=window.KnowledgeEngine.answer(s,q);if(k.found)return{type:'knowledge',text:k.text,article:k.article};const hits=window.SearchEngine.searchAll(s,q);if(hits.length)return{type:'search',text:`I found ${hits.length} matching record${hits.length===1?'':'s'}.`,results:hits.slice(0,10)};const r=window.RPBrainEngine.recommend(s,null,metricsFn);return{type:'recommendation',text:r.headline,results:r.priorities}}
   };
 })();
+
+/* RP IA Engine Core v6.1 — compliance expansion */
+(function(){
+  const norm=window.SearchEngine.normalize;
+  const rank=window.RulesEngine.levelRank;
+  const now=()=>new Date().toISOString();
+  const latestResults=(s,employeeNumber)=>{
+    const m=new Map();
+    (s.results||[]).filter(r=>!employeeNumber||String(r.employeeNumber)===String(employeeNumber))
+      .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))
+      .forEach(r=>m.set(`${r.employeeNumber}|${r.subtaskId}`,r));
+    return m;
+  };
+
+  window.RPIAEngines.version='6.1.0';
+
+  window.PersonnelMaster={
+    get:(s,id)=>(s.personnel||[]).find(p=>String(p.employeeNumber)===String(id)),
+    active:s=>(s.personnel||[]).filter(p=>p.employeeNumber&&p.status==='Active'),
+    snapshot:p=>p?{employeeNumber:String(p.employeeNumber||''),name:p.name||'',shift:p.shift||'',role:p.role||'',assignedLevel:p.assignedLevel||'-10',status:p.status||''}:null,
+    resolveRecord:(s,record)=>{
+      const p=window.PersonnelMaster.get(s,record?.employeeNumber);
+      return p?{...record,associateName:p.name,employee:p.name,shift:p.shift,role:p.role,assignedLevel:p.assignedLevel}:record;
+    }
+  };
+
+  const oldSearchAll=window.SearchEngine.searchAll;
+  window.SearchEngine.searchAll=(s,query)=>{
+    const q=norm(query); if(!q)return[];
+    const out=oldSearchAll(s,query);
+    (s.sessions||[]).forEach(x=>{const p=window.PersonnelMaster.get(s,x.employeeNumber);if(norm(`${x.id} ${x.employeeNumber} ${p?.name||x.associateName} ${p?.shift||x.shift} ${p?.role||x.role} ${x.taskId} ${x.taskName} ${x.evaluatorName} ${x.finalStatus}`).includes(q))out.push({type:'assessment',id:x.id,title:`Assessment — ${p?.name||x.associateName||x.employeeNumber}`,meta:`#${x.employeeNumber} · ${x.taskId} · ${x.finalStatus||x.status}`})});
+    (s.results||[]).forEach(x=>{const p=window.PersonnelMaster.get(s,x.employeeNumber);if(norm(`${x.employeeNumber} ${p?.name||x.associateName} ${x.taskId} ${x.subtaskId} ${x.result} ${x.evaluatorName}`).includes(q))out.push({type:'result',id:`${x.sessionId}|${x.subtaskId}`,title:`${x.subtaskId} — ${x.result}`,meta:`${p?.name||x.associateName||x.employeeNumber} · ${x.taskId}`})});
+    const seen=new Set();return out.filter(x=>{const k=`${x.type}|${x.id}`;if(seen.has(k))return false;seen.add(k);return true}).slice(0,150);
+  };
+
+  window.RulesEngine.requirementsForPerson=(s,p)=>(s.subtasks||[]).filter(x=>x.status==='Active'&&(rank[x.requiredLevel]||10)<=(rank[p?.assignedLevel||'-10']||10));
+  window.RulesEngine.qualificationSummary=(s,p)=>{
+    const req=window.RulesEngine.requirementsForPerson(s,p), latest=latestResults(s,p.employeeNumber);
+    const levels=['-10','-20','-30','-40'];
+    const levelState={};
+    for(const level of levels){
+      const applicable=req.filter(x=>(rank[x.requiredLevel]||10)<=rank[level] && (rank[x.requiredLevel]||10)<=rank[p.assignedLevel||'-10']);
+      const rows=applicable.map(x=>({subtask:x,result:latest.get(`${p.employeeNumber}|${x.id}`)}));
+      const blockers=rows.filter(x=>x.result?.result!=='GO'||(x.subtask.srLeadVerification&&!String(x.result?.srLeadVerification||'').trim()));
+      const critical=rows.filter(x=>x.subtask.criticality==='Critical Gate'&&x.result?.result!=='GO');
+      levelState[level]={required:rows.length,go:rows.filter(x=>x.result?.result==='GO').length,qualified:rows.length>0&&blockers.length===0,blockers:blockers.length,critical:critical.length};
+    }
+    let highest='None';for(const l of levels)if(levelState[l].qualified)highest=l;
+    const assigned=levelState[p.assignedLevel]||{required:0,go:0,qualified:false,blockers:0,critical:0};
+    return{assignedLevel:p.assignedLevel,highestFullyQualified:highest,assignedQualified:assigned.qualified,required:assigned.required,go:assigned.go,pct:assigned.required?Math.round(assigned.go/assigned.required*100):0,blockers:assigned.blockers,critical:assigned.critical,levels:levelState};
+  };
+
+  window.RulesEngine.validateAssessment=({user,person,task,rows})=>{
+    const errors=[],warnings=[];
+    if(!person)errors.push('Select a valid associate from the Personnel Master.');
+    if(!task)errors.push('Select a valid active METL Task.');
+    if(task&&!window.RulesEngine.evaluatorCan(user,task.requiredLevel))errors.push(`Evaluator authority does not permit ${task.requiredLevel} work.`);
+    for(const row of rows||[]){
+      if(!window.RulesEngine.evaluatorCan(user,row.requiredLevel))errors.push(`${row.subtaskId}: evaluator authority is below ${row.requiredLevel}.`);
+      if(row.result==='GO'&&row.evidenceRequired&&!String(row.evidenceReference||'').trim())errors.push(`${row.subtaskId}: evidence is required before GO can be recorded.`);
+      if(row.result==='GO'&&row.srLeadRequired&&!String(row.srLeadVerification||'').trim())errors.push(`${row.subtaskId}: Sr. Lead verification is required.`);
+      if(row.criticality==='Critical Gate'&&row.result!=='GO'&&row.result!=='NOT EVALUATED')warnings.push(`${row.subtaskId}: Critical Gate failure blocks qualification and independent authorization.`);
+    }
+    if((rows||[]).every(r=>r.result==='NOT EVALUATED'))errors.push('Evaluate at least one subtask.');
+    return{valid:errors.length===0,errors,warnings};
+  };
+
+  window.RulesEngine.canCloseCorrectiveAction=(user,action,reassessmentResult,verification)=>{
+    const errors=[];
+    if(reassessmentResult!=='GO')errors.push('A GO reassessment is required before closure.');
+    const subLevel=action.requiredLevel||'-10';
+    if(!window.RulesEngine.evaluatorCan(user,subLevel))errors.push(`Closure authority does not cover ${subLevel}.`);
+    if(action.criticality==='Critical Gate'&&!String(verification||'').trim())errors.push('Critical Gate closure requires authorized verification.');
+    return{valid:errors.length===0,errors};
+  };
+
+  const oldRecord=window.AuditEngine.record;
+  window.AuditEngine.record=(s,user,action,entity,id,detail,before=null,after=null)=>{
+    const rec=oldRecord(s,user,action,entity,id,detail,before,after);
+    rec.sequence=(s.audit||[]).length;
+    rec.device={platform:navigator?.platform||'',userAgent:String(navigator?.userAgent||'').slice(0,180)};
+    rec.recordedAt=now();
+    return rec;
+  };
+})();
