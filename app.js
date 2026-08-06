@@ -204,9 +204,47 @@ function submitAssessment(){const emp=$('#aPerson').value,tid=$('#aTask').value,
 function sessionTable(rows){return`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Associate</th><th>Task</th><th>Evaluator</th><th>Method</th><th>Final status</th><th></th></tr></thead><tbody>${rows.map(s=>`<tr><td>${esc(s.date)}</td><td>${esc(s.associateName)}</td><td>${s.taskId} — ${esc(s.taskName)}</td><td>${esc(s.evaluatorName)}</td><td>${esc(s.method)}</td><td><span class="pill ${String(s.finalStatus).includes('CRITICAL')?'critical':String(s.finalStatus).includes('UNQUALIFIED')?'nogo':'go'}">${esc(s.finalStatus||s.status)}</span></td><td><button class="secondary sv" data-id="${s.id}">View</button></td></tr>`).join('')||'<tr><td colspan="7">No assessment sessions.</td></tr>'}</tbody></table></div>`}
 function sessionHistory(){const rows=[...state.sessions].sort((a,b)=>(b.date||'').localeCompare(a.date||''));page('Assessment History','Signed sessions remain preserved; reassessments are separate records',`<div class="filters"><input id="hSearch" placeholder="Search associate, task, evaluator"><select id="hResult"><option value="">All results</option><option>UNQUALIFIED</option><option>CRITICAL</option><option>RECORDED</option></select></div><div id="hTable"></div>`,'<button class="secondary" id="exportAssess">Export assessments CSV</button>');const draw=()=>{const q=$('#hSearch').value.toLowerCase(),r=$('#hResult').value;const f=rows.filter(s=>(s.associateName+' '+s.taskId+' '+s.taskName+' '+s.evaluatorName).toLowerCase().includes(q)&&(!r||String(s.finalStatus).includes(r)));$('#hTable').innerHTML=sessionTable(f);$$('.sv').forEach(b=>b.onclick=()=>sessionDetail(b.dataset.id))};$('#hSearch').oninput=draw;$('#hResult').oninput=draw;draw();$('#exportAssess').onclick=exportAssessments}
 function sessionDetail(id){const s=state.sessions.find(x=>x.id===id),rows=state.results.filter(r=>r.sessionId===id);page(`Assessment ${s.id}`,`${s.date} · ${esc(s.associateName)} · ${s.taskId}`,`<div class="card"><p><b>Evaluator:</b> ${esc(s.evaluatorName)} · <b>Method:</b> ${esc(s.method)} · <b>Location:</b> ${esc(s.location)}</p><p><b>Final status:</b> ${esc(s.finalStatus)}</p><p><b>Signature:</b> ${esc(s.signature)}</p><p><b>Reassessment:</b> ${esc(s.reassessmentDate||'Not scheduled')}</p></div><div class="table-wrap"><table><thead><tr><th>Subtask</th><th>Criticality</th><th>Result</th><th>Evidence</th><th>Observation</th><th>Verification</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.subtaskId} — ${esc(r.subtaskName)}</td><td>${esc(r.criticality)}</td><td>${esc(r.result)}</td><td>${esc(r.evidenceReference)}</td><td>${esc(r.observation)}</td><td>${esc(r.srLeadVerification)}</td></tr>`).join('')}</tbody></table></div>`,'<button class="secondary" id="backHist">Back</button>');$('#backHist').onclick=sessionHistory}
-function actions(){reconcileCriticalGateActions();const rows=[...state.actions].sort((a,b)=>(a.status==='Closed')-(b.status==='Closed')||(a.targetDate||'').localeCompare(b.targetDate||''));page('Corrective Actions & Reassessment','Original failed assessments remain unchanged; closure requires demonstrated competency',`<div class="filters"><select id="caStatus"><option value="">All statuses</option><option>Open</option><option>Closed</option></select><input id="caSearch" placeholder="Search associate or task"></div><div id="caTable"></div>`);const draw=()=>{const st=$('#caStatus').value,q=$('#caSearch').value.toLowerCase(),f=rows.filter(a=>(!st||a.status===st)&&(a.employee+' '+a.taskId+' '+a.subtaskId).toLowerCase().includes(q));$('#caTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Associate</th><th>Task / Subtask</th><th>Due</th><th>Criticality</th><th>Status</th><th>Owner</th><th></th></tr></thead><tbody>${f.map(a=>`<tr><td>${esc(a.employee)}</td><td>${a.taskId} / ${a.subtaskId}</td><td class="${a.status!=='Closed'&&a.targetDate&&a.targetDate<today()?'overdue':''}">${esc(a.targetDate)}</td><td><span class="pill ${a.criticality==='Critical Gate'?'critical':'ne'}">${esc(a.criticality)}</span></td><td>${a.status}</td><td>${esc(a.responsibleTrainer||a.owner)}</td><td><button class="secondary cav" data-id="${a.id}">Open</button></td></tr>`).join('')||'<tr><td colspan="7">No corrective actions.</td></tr>'}</tbody></table></div>`;$$('.cav').forEach(b=>b.onclick=()=>actionDetail(b.dataset.id))};$('#caStatus').oninput=draw;$('#caSearch').oninput=draw;draw()}
+function correctiveActionRepository(){
+  reconcileCriticalGateActions();
+  if(!Array.isArray(state.actions))state.actions=[];
+  let changed=false;
+  for(const a of state.actions){
+    if(!a.id){a.id=uid('CA');changed=true}
+    const person=state.personnel.find(p=>String(p.employeeNumber||'')===String(a.employeeNumber||''));
+    if(!a.employee&&person?.name){a.employee=person.name;changed=true}
+    const normalizedStatus=String(a.status||'').toLowerCase()==='closed'?'Closed':'Open';
+    if(a.status!==normalizedStatus){a.status=normalizedStatus;changed=true}
+    if(!a.criticality)a.criticality='Supporting';
+  }
+  if(changed)save();
+  return [...state.actions].sort((a,b)=>(a.status==='Closed')-(b.status==='Closed')||(a.targetDate||'9999-12-31').localeCompare(b.targetDate||'9999-12-31')||(a.created||'').localeCompare(b.created||''));
+}
+
+function actions(focusActionId=''){
+  const rows=correctiveActionRepository();
+  page('Corrective Actions & Reassessment','Original failed assessments remain unchanged; closure requires demonstrated competency',`<div class="filters"><select id="caStatus"><option value="">All statuses</option><option>Open</option><option>Closed</option></select><input id="caSearch" placeholder="Search associate or task"></div><div id="caTable"></div>`);
+  const draw=()=>{
+    const st=$('#caStatus').value,q=String($('#caSearch').value||'').toLowerCase().trim();
+    const f=rows.filter(a=>(!st||a.status===st)&&(`${a.employee||''} ${a.employeeNumber||''} ${a.taskId||''} ${a.subtaskId||''} ${a.id||''}`).toLowerCase().includes(q));
+    $('#caTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Associate</th><th>Task / Subtask</th><th>Due</th><th>Criticality</th><th>Status</th><th>Owner</th><th></th></tr></thead><tbody>${f.map(a=>`<tr class="${String(a.id)===String(focusActionId)?'focused-row':''}" data-action-row="${esc(a.id)}"><td>${esc(a.employee||'Unknown associate')}</td><td>${esc(a.taskId)} / ${esc(a.subtaskId)}</td><td class="${a.status!=='Closed'&&a.targetDate&&a.targetDate<today()?'overdue':''}">${esc(a.targetDate||'')}</td><td><span class="pill ${a.criticality==='Critical Gate'?'critical':'ne'}">${esc(a.criticality)}</span></td><td>${esc(a.status)}</td><td>${esc(a.responsibleTrainer||a.owner||'')}</td><td><button class="secondary cav" data-id="${esc(a.id)}">Open</button></td></tr>`).join('')||'<tr><td colspan="7">No corrective actions.</td></tr>'}</tbody></table></div>`;
+    $$('.cav').forEach(b=>b.onclick=()=>actionDetail(b.dataset.id));
+  };
+  $('#caStatus').oninput=draw;$('#caSearch').oninput=draw;draw();
+  if(focusActionId){
+    const target=rows.find(a=>String(a.id)===String(focusActionId));
+    if(target)setTimeout(()=>actionDetail(target.id),0);else toast('Corrective action not found');
+  }
+}
 function actionDetail(id){const a=state.actions.find(x=>x.id===id);modal(`<h2>Corrective Action ${a.id}</h2><div class="form-grid"><label>Associate<input value="${esc(a.employee)}" readonly></label><label>Task / Subtask<input value="${a.taskId} / ${a.subtaskId}" readonly></label><label class="full">Standard not met<textarea id="caStd">${esc(a.standardNotMet||a.observation)}</textarea></label><label class="full">Immediate coaching<textarea id="caCoach">${esc(a.immediateCoaching)}</textarea></label><label class="full">Required retraining<textarea id="caTrain">${esc(a.requiredRetraining)}</textarea></label><label>Responsible trainer<input id="caOwner" value="${esc(a.responsibleTrainer||a.owner)}"></label><label>Target completion<input id="caDue" type="date" value="${esc(a.targetDate)}"></label><label>Reassessment date<input id="caRe" type="date" value="${esc(a.reassessmentDate)}"></label><label>Reassessment result<select id="caResult"><option></option>${['GO','NO-GO','REQUIRES ASSISTANCE'].map(x=>`<option ${a.reassessmentResult===x?'selected':''}>${x}</option>`).join('')}</select></label></div><div class="actions"><button class="primary" id="saveCA">Save</button>${a.status!=='Closed'?'<button class="secondary" id="closeCA">Close after demonstrated competency</button>':''}<button class="secondary close">Cancel</button></div>`);$('#saveCA').onclick=()=>{const old=clone(a);Object.assign(a,{standardNotMet:$('#caStd').value,immediateCoaching:$('#caCoach').value,requiredRetraining:$('#caTrain').value,responsibleTrainer:$('#caOwner').value,targetDate:$('#caDue').value,reassessmentDate:$('#caRe').value,reassessmentResult:$('#caResult').value});audit('UPDATE','Corrective Action',a.id,'Action plan updated',old,a);closeModal();actions()};if($('#closeCA'))$('#closeCA').onclick=()=>{if($('#caResult').value!=='GO')return toast('A GO reassessment is required before closure');const old=clone(a);Object.assign(a,{reassessmentResult:'GO',status:'Closed',closureDate:new Date().toISOString(),closedBy:currentUser.name,closureAuthority:currentUser.maxLevel});audit('CLOSE','Corrective Action',a.id,'Closed after GO reassessment',old,a);closeModal();actions()}}
-function buildNotifications(){const n=[],now=today();for(const a of state.actions)if(a.status!=='Closed'){if(a.targetDate&&a.targetDate<now)n.push({type:'Overdue Corrective Action',severity:'high',text:`${a.employee} — ${a.taskId}/${a.subtaskId} was due ${a.targetDate}`});else n.push({type:'Open Corrective Action',severity:a.criticality==='Critical Gate'?'high':'medium',text:`${a.employee} — ${a.taskId}/${a.subtaskId}`})}for(const s of state.sessions)if(s.reassessmentDate&&s.reassessmentDate<=new Date(Date.now()+state.settings.reassessmentWarningDays*86400000).toISOString().slice(0,10))n.push({type:'Reassessment Due',severity:s.reassessmentDate<now?'high':'medium',text:`${s.associateName} — ${s.taskId} due ${s.reassessmentDate}`});return n}
+function buildNotifications(){
+  const n=[],now=today();
+  for(const a of correctiveActionRepository())if(a.status!=='Closed'){
+    if(a.targetDate&&a.targetDate<now)n.push({type:'Overdue Corrective Action',severity:'high',text:`${a.employee} — ${a.taskId}/${a.subtaskId} was due ${a.targetDate}`,recordType:'correctiveAction',recordId:a.id});
+    else n.push({type:'Open Corrective Action',severity:a.criticality==='Critical Gate'?'high':'medium',text:`${a.employee} — ${a.taskId}/${a.subtaskId}`,recordType:'correctiveAction',recordId:a.id});
+  }
+  for(const s of state.sessions)if(s.reassessmentDate&&s.reassessmentDate<=new Date(Date.now()+state.settings.reassessmentWarningDays*86400000).toISOString().slice(0,10))n.push({type:'Reassessment Due',severity:s.reassessmentDate<now?'high':'medium',text:`${s.associateName} — ${s.taskId} due ${s.reassessmentDate}`,recordType:'assessment',recordId:s.id});
+  return n;
+}
 function notificationView(){
   const items=buildNotifications();
   const high=items.filter(n=>n.severity==='high').length;
@@ -218,8 +256,11 @@ function notificationView(){
   );
   $$('.notificationItem').forEach(btn=>btn.onclick=()=>{
     const n=items[Number(btn.dataset.index)];
-    if(n?.type.includes('Corrective')) navigate('actions');
-    else if(n?.type.includes('Reassessment')) navigate('sessions');
+    if(!n)return;
+    if(n.recordType==='correctiveAction'&&n.recordId)return actions(n.recordId);
+    if(n.recordType==='assessment'&&n.recordId)return sessionDetail(n.recordId);
+    if(n.type.includes('Corrective'))return actions();
+    if(n.type.includes('Reassessment'))return sessionHistory();
   });
 }
 
@@ -341,7 +382,7 @@ function exportAudit(){const h=['Date Time','User','Action','Entity','ID','Detai
 function restoreBackup(e){const f=e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const obj=JSON.parse(reader.result);state=normalize(obj);audit('RESTORE','System','backup','JSON backup restored');toast('Backup restored');dashboard()}catch{toast('Invalid backup file')}};reader.readAsText(f)}
 function modal(html){document.body.insertAdjacentHTML('beforeend',`<div class="modal"><div class="modal-card">${html}</div></div>`);$$('.close').forEach(b=>b.onclick=closeModal)} function closeModal(){$('.modal')?.remove()}
 $('#langEn').onclick=()=>applyLanguage('en');$('#langEs').onclick=()=>applyLanguage('es');if($('#languageMenuBtn'))$('#languageMenuBtn').onclick=()=>{const menu=$('#languageMenu');const opening=menu.classList.contains('hidden');menu.classList.toggle('hidden');$('#languageMenuBtn').setAttribute('aria-expanded',opening?'true':'false')};document.addEventListener('click',e=>{const wrap=e.target.closest?.('.login-language');if(!wrap){$('#languageMenu')?.classList.add('hidden');$('#languageMenuBtn')?.setAttribute('aria-expanded','false')}});applyLanguage(uiLanguage,false);$('#loginBtn').onclick=login;$('#pin').onkeydown=e=>{if(e.key==='Enter')login()};$('#changePasswordBtn').onclick=changePassword;$('#profileBtn').onclick=()=>navigate('profile');$('#serverConfigBtn').onclick=()=>window.RpiaServerSetup.open();$('#logoutBtn').onclick=logout;$('#menuBtn').onclick=()=>{$('#nav').classList.toggle('open');$('#navScrim').classList.toggle('open')};$('#navScrim').onclick=()=>{$('#nav').classList.remove('open');$('#navScrim').classList.remove('open')};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=8.0.0').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=9.8.0').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});
 
 /* RP IA v6.1 — core compliance implementation overrides */
 function matrixView(){

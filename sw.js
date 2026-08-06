@@ -1,4 +1,4 @@
-const CACHE='rp-ia-v9.7.0-clean-assets';
+const CACHE='rp-ia-v9.8.0-notification-action-link';
 const ASSETS=[
   './',
   './index.html',
