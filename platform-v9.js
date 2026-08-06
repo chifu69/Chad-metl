@@ -181,13 +181,10 @@
     const render=()=>{
       const box=$q('#pSearch');if(!box)return;
       const raw=String(box.value??''),q=clean(raw),qd=digits(raw),sh=String($q('#pShift')?.value||''),st=String($q('#pStatus')?.value||'');
-      const tokens=q.split(' ').filter(Boolean);
-      const source=Array.isArray(state.personnel)?state.personnel:[];
-      const scored=[];
+      const tokens=q.split(' ').filter(Boolean),source=Array.isArray(state.personnel)?state.personnel:[],scored=[];
       for(const p of source){
         if(sh&&String(p.shift||'')!==sh)continue;if(st&&String(p.status||'')!==st)continue;
-        const emp=digits(p.employeeNumber),name=clean(p.name),fields=[p.employeeNumber,p.name,p.positionId,p.shift,p.role,p.assignedLevel,p.approvedLevel,p.status,p.qualifiedLines,p.supervisor].map(clean);
-        const hay=fields.join(' ');let score=0;
+        const emp=digits(p.employeeNumber),name=clean(p.name),fields=[p.employeeNumber,p.name,p.positionId,p.shift,p.role,p.assignedLevel,p.approvedLevel,p.status,p.qualifiedLines,p.supervisor].map(clean),hay=fields.join(' ');let score=0;
         if(!q&&!qd)score=1;
         if(qd){if(emp===qd)score=100000;else if(emp.startsWith(qd))score=80000;else if(emp.includes(qd))score=60000;}
         if(q){if(name===q)score=Math.max(score,95000);else if(name.startsWith(q))score=Math.max(score,75000);else if(fields.some(v=>v===q))score=Math.max(score,70000);else if(hay.includes(q))score=Math.max(score,50000);if(tokens.length&&tokens.every(t=>fields.some(v=>v.includes(t))))score=Math.max(score,45000);}
@@ -195,16 +192,16 @@
       }
       scored.sort((a,b)=>b.score-a.score||String(a.p.employeeNumber||'').localeCompare(String(b.p.employeeNumber||''),undefined,{numeric:true}));
       $q('#pSearchMeta').textContent=`${scored.length} result${scored.length===1?'':'s'}${raw.trim()?` for “${raw.trim()}”`:''}`;
-      const rows=scored.map(({p})=>`<tr><td>${employeePhoto(p,'employee-thumb')}</td><td><b>${esc(p.employeeNumber)}</b></td><td><button type="button" class="text-btn pd" data-emp="${esc(p.employeeNumber)}" data-pos="${esc(p.positionId)}">${esc(p.name||p.positionId)}</button></td><td>${esc(p.shift)}</td><td>${esc(p.role)}</td><td><span class="pill ${String(p.status).toLowerCase()}">${esc(p.status)}</span></td><td>${esc(p.assignedLevel)}</td>${canManagePersonnel()?`<td><button type="button" class="secondary pe" data-pos="${esc(p.positionId)}">Edit</button></td>`:''}</tr>`).join('');
-      $q('#ptable').innerHTML=rows?`<div class="table-wrap"><table><thead><tr><th>Photo</th><th>Employee #</th><th>Name</th><th>Shift</th><th>Role</th><th>Status</th><th>Level</th>${canManagePersonnel()?'<th>Action</th>':''}</tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="card empty-state"><b>No personnel found</b><p>Try the exact employee number, part of the number, first name, or last name.</p></div>';
-      $$q('.pd').forEach(b=>b.onclick=()=>window.openEmployeeProfile?window.openEmployeeProfile(b.dataset.emp||b.dataset.pos):personDetail(b.dataset.emp));$$q('.pe').forEach(b=>b.onclick=()=>personEdit(b.dataset.pos));
-      lastSignature=[raw,sh,st,state.personnel.length].join('|');
+      const cards=scored.map(({p})=>`<article class="personnel-result-card" data-employee="${esc(p.employeeNumber)}"><div class="personnel-result-photo">${employeePhoto(p,'employee-thumb')}</div><div class="personnel-result-main"><button type="button" class="text-btn pd" data-emp="${esc(p.employeeNumber)}" data-pos="${esc(p.positionId)}">${esc(p.name||p.positionId)}</button><p>Employee #${esc(p.employeeNumber)} · ${esc(p.shift)} Shift</p><div class="personnel-result-meta"><span>${esc(p.role)}</span><span>${esc(p.assignedLevel||'—')}</span><span class="pill ${String(p.status).toLowerCase()}">${esc(p.status)}</span></div></div><div class="personnel-result-actions"><button type="button" class="secondary pd" data-emp="${esc(p.employeeNumber)}" data-pos="${esc(p.positionId)}">View profile</button>${canManagePersonnel()?`<button type="button" class="secondary pe" data-pos="${esc(p.positionId)}">Edit</button>`:''}</div></article>`).join('');
+      $q('#ptable').innerHTML=cards?`<div class="personnel-result-list">${cards}</div>`:'<div class="card empty-state"><b>No personnel found</b><p>Try the exact employee number, part of the number, first name, or last name.</p></div>';
+      $$q('.pd').forEach(b=>b.onclick=()=>window.openEmployeeProfile?window.openEmployeeProfile(b.dataset.emp||b.dataset.pos):personDetail(b.dataset.emp));
+      $$q('.pe').forEach(b=>b.onclick=()=>personEdit(b.dataset.pos));
+      lastSignature=[raw,sh,st,source.length,scored.length].join('|');
     };
-    const forceRender=()=>render();
-    ['input','change','search','keyup','compositionend','beforeinput'].forEach(ev=>$q('#pSearch').addEventListener(ev,forceRender));
+    ['input','change','search','keyup','compositionend'].forEach(ev=>$q('#pSearch').addEventListener(ev,render));
     $q('#pSearch').addEventListener('paste',()=>setTimeout(render,0));
     $q('#pShift').addEventListener('change',render);$q('#pStatus').addEventListener('change',render);
-    const watcher=setInterval(()=>{const el=$q('#pSearch');if(!el||!document.body.contains(el)){clearInterval(watcher);return}const sig=[el.value,$q('#pShift')?.value||'',$q('#pStatus')?.value||'',state.personnel.length].join('|');if(sig!==lastSignature)render()},120);
+    const watcher=setInterval(()=>{const el=$q('#pSearch');if(!el||!document.body.contains(el)){clearInterval(watcher);return}const sig=[el.value,$q('#pShift')?.value||'',$q('#pStatus')?.value||'',state.personnel.length].join('|');if(!lastSignature.startsWith(sig))render()},180);
     if($q('#addPerson'))$q('#addPerson').onclick=()=>personEdit();render();
   };
 
