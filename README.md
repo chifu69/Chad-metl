@@ -1,13 +1,19 @@
-# RP IA v9.4 — Search & Profile Navigation Hard Fix
+# RP IA Enterprise v9.7 — Clean Assets Release
 
-- Personnel search now runs directly against the complete Personnel Master on every keystroke.
-- Exact and partial employee-number matches are normalized as digits.
-- Name, role, shift, status, level, line, supervisor, and position ID are searchable.
-- Eagle AI result buttons are rebound every time the floating conversation panel renders.
-- Open employee profile resolves by employee number, position ID, or exact name and opens the specific profile.
-- All frontend assets are cache-busted to v9.4.0.
+This maintenance release removes obsolete project artifacts without changing the working application layout or business functions.
 
-## v9.4 focused reliability fix
-- Personnel search now refreshes directly from the full Personnel Master and includes an iOS-safe value watcher.
-- Existing failed Critical Gate assessment records are reconciled into visible corrective actions when a prior version did not create them.
-- No dashboard layout or architecture changes were made in this maintenance release.
+## Cleanup completed
+- Removed the legacy blue-bird `icon.svg`.
+- Removed obsolete architecture, validation, implementation-status, and stability documents from older releases.
+- Renamed the active PWA icons to unique Eagle AI filenames so old icon references cannot be reused accidentally.
+- Updated HTML, JavaScript, manifest, and service-worker references to the approved Eagle AI assets.
+- Rebuilt the service-worker asset list and cache as `rp-ia-v9.7.0-clean-assets`.
+
+## Current branding files
+- `eagle-ai-logo.png`
+- `rpia-eagle-180.png`
+- `rpia-eagle-192.png`
+- `rpia-eagle-512.png`
+
+## Deployment
+Replace the previous repository contents with every file in this package. An already installed iPhone PWA may retain its old Home Screen icon until the old installation is removed and RP IA is added to the Home Screen again.
