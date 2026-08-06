@@ -146,7 +146,18 @@ function personnel(){
       }
       return {p,score};
     }).filter(({p,score})=>score>0&&(!shift||String(p.shift)===shift)&&(!status||String(p.status)===status))
-      .sort((a,b)=>b.score-a.score||String(a.p.employeeNumber??'').localeCompare(String(b.p.employeeNumber??''),undefined,{numeric:true}));
+      .sort((a,b)=>{
+        const aVacant=String(a.p.status||'').toLowerCase()==='vacant'||(!a.p.name&&!a.p.employeeNumber);
+        const bVacant=String(b.p.status||'').toLowerCase()==='vacant'||(!b.p.name&&!b.p.employeeNumber);
+        if(aVacant!==bVacant) return aVacant?1:-1;
+        if(b.score!==a.score) return b.score-a.score;
+        if(!aVacant){
+          const nameOrder=String(a.p.name||'').localeCompare(String(b.p.name||''),undefined,{sensitivity:'base'});
+          if(nameOrder) return nameOrder;
+          return String(a.p.employeeNumber??'').localeCompare(String(b.p.employeeNumber??''),undefined,{numeric:true});
+        }
+        return String(a.p.positionId||'').localeCompare(String(b.p.positionId||''),undefined,{numeric:true});
+      });
     $('#pSearchMeta').textContent=`${results.length} result${results.length===1?'':'s'}${raw.trim()?` for “${raw.trim()}”`:''}`;
     const rows=results.map(({p})=>`<tr><td>${employeePhoto(p,'employee-thumb')}</td><td>${esc(p.employeeNumber)}</td><td><button type="button" class="text-btn pd" data-emp="${esc(p.employeeNumber)}" data-pos="${esc(p.positionId)}">${esc(p.name||p.positionId)}</button></td><td>${esc(p.shift)}</td><td>${esc(p.role)}</td><td><span class="pill ${String(p.status).toLowerCase()}">${esc(p.status)}</span></td><td>${esc(p.assignedLevel)}</td><td>${esc(p.approvedLevel||'—')}</td>${canManagePersonnel()?`<td><div class="row-actions"><button type="button" class="secondary photoBtn" data-pos="${esc(p.positionId)}">${p.photo?'Change photo':'Add photo'}</button><button type="button" class="secondary pe" data-pos="${esc(p.positionId)}">Edit</button></div></td>`:''}</tr>`).join('');
     $('#ptable').innerHTML=results.length?`<div class="table-wrap"><table><thead><tr><th>Photo</th><th>Employee #</th><th>Name</th><th>Shift</th><th>Role</th><th>Status</th><th>Assigned</th><th>Approved</th>${canManagePersonnel()?'<th>Actions</th>':''}</tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="card empty-state"><b>No personnel found</b><p>Try the exact employee number, part of the number, first name, or last name.</p></div>';

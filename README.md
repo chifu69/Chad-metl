@@ -5,7 +5,7 @@
 - Name, role, shift, status, level, line, supervisor, and position ID are searchable.
 - Eagle AI result buttons are rebound every time the floating conversation panel renders.
 - Open employee profile resolves by employee number, position ID, or exact name and opens the specific profile.
-- All frontend assets are cache-busted to v9.5.0.
+- All frontend assets are cache-busted to v9.4.0.
 
 ## v9.4 focused reliability fix
 - Personnel search now refreshes directly from the full Personnel Master and includes an iOS-safe value watcher.
