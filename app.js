@@ -116,7 +116,7 @@ function reconcileCriticalGateActions(){
 }
 window.reconcileCriticalGateActions=reconcileCriticalGateActions;
 
-function dashboard(){const interests=brainTop();const people=activePeople(),metrics=people.map(p=>({...p,...personMetrics(p)}));const total=metrics.length,ready=metrics.filter(x=>x.pct===100&&!x.open&&!x.critical).length,open=state.actions.filter(a=>a.status!=='Closed').length,crit=metrics.reduce((a,x)=>a+x.critical,0),overdue=state.actions.filter(a=>a.status!=='Closed'&&a.targetDate&&a.targetDate<today()).length;const shifts=['A','B','C','D'].map(sh=>{const r=metrics.filter(x=>x.shift===sh);return{shift:sh,count:r.length,pct:r.length?Math.round(r.reduce((a,x)=>a+x.pct,0)/r.length):0,critical:r.reduce((a,x)=>a+x.critical,0)}});page(uiLanguage==='es'?'Panel de preparación':'Readiness Dashboard',uiLanguage==='es'?'Cálculos locales en vivo de competencias, evaluaciones y acciones':'Live local calculations from competency, assessment, and corrective-action records',`<div class="card brain-hero"><span class="brain-chip">Eagle · Adaptive local guidance</span><h2>${uiLanguage==='es'?'Bienvenido de nuevo':'Welcome back'}, ${esc(currentUser.name)}.</h2><p>${interests.length?(uiLanguage==='es'?'Tu enfoque reciente: ':'Your recent focus: ')+interests.map(x=>x[0]).join(' · '):(uiLanguage==='es'?'Eagle aprenderá qué información te ayuda más.':'Eagle will learn which information helps you most.')}</p></div><div class="kpis"><div class="kpi"><b>${total}</b><span>Active associates</span></div><div class="kpi good"><b>${ready}</b><span>Fully ready</span></div><div class="kpi warn"><b>${open}</b><span>Open actions</span></div><div class="kpi bad"><b>${crit}</b><span>Critical failures</span></div><div class="kpi bad"><b>${overdue}</b><span>Overdue actions</span></div></div><div class="grid"><div class="card"><h3>Shift readiness</h3>${shifts.map(s=>`<div class="shift-row"><b>${s.shift} Shift</b><div class="progress"><span style="width:${s.pct}%"></span></div><span>${s.pct}% · ${s.critical} critical</span></div>`).join('')}</div><div class="card"><h3>Priority attention</h3>${metrics.sort((a,b)=>b.critical-a.critical||b.open-a.open||a.pct-b.pct).slice(0,8).map(x=>`<button class="list-link personOpen" data-emp="${x.employeeNumber}"><span>${esc(x.name)} · ${x.shift} · ${x.assignedLevel}</span><span class="pill ${x.critical?'critical':x.open?'nogo':x.pct>=90?'go':'ne'}">${x.pct}%</span></button>`).join('')}</div></div>`,`<button class="secondary" id="exportDash">Export dashboard CSV</button>`);$$('.personOpen').forEach(b=>b.onclick=()=>personDetail(b.dataset.emp));$('#exportDash').onclick=exportDashboard}
+function dashboard(){const interests=brainTop();const people=activePeople(),metrics=people.map(p=>({...p,...personMetrics(p)}));const actionRows=correctiveActionRepository(),total=metrics.length,ready=metrics.filter(x=>x.pct===100&&!x.open&&!x.critical).length,open=actionRows.filter(a=>a.status!=='Closed').length,crit=metrics.reduce((a,x)=>a+x.critical,0),overdue=actionRows.filter(a=>a.status!=='Closed'&&a.targetDate&&a.targetDate<today()).length;const shifts=['A','B','C','D'].map(sh=>{const r=metrics.filter(x=>x.shift===sh);return{shift:sh,count:r.length,pct:r.length?Math.round(r.reduce((a,x)=>a+x.pct,0)/r.length):0,critical:r.reduce((a,x)=>a+x.critical,0)}});page(uiLanguage==='es'?'Panel de preparación':'Readiness Dashboard',uiLanguage==='es'?'Cálculos locales en vivo de competencias, evaluaciones y acciones':'Live local calculations from competency, assessment, and corrective-action records',`<div class="card brain-hero"><span class="brain-chip">Eagle · Adaptive local guidance</span><h2>${uiLanguage==='es'?'Bienvenido de nuevo':'Welcome back'}, ${esc(currentUser.name)}.</h2><p>${interests.length?(uiLanguage==='es'?'Tu enfoque reciente: ':'Your recent focus: ')+interests.map(x=>x[0]).join(' · '):(uiLanguage==='es'?'Eagle aprenderá qué información te ayuda más.':'Eagle will learn which information helps you most.')}</p></div><div class="kpis"><div class="kpi"><b>${total}</b><span>Active associates</span></div><div class="kpi good"><b>${ready}</b><span>Fully ready</span></div><div class="kpi warn"><b>${open}</b><span>Open actions</span></div><div class="kpi bad"><b>${crit}</b><span>Critical failures</span></div><div class="kpi bad"><b>${overdue}</b><span>Overdue actions</span></div></div><div class="grid"><div class="card"><h3>Shift readiness</h3>${shifts.map(s=>`<div class="shift-row"><b>${s.shift} Shift</b><div class="progress"><span style="width:${s.pct}%"></span></div><span>${s.pct}% · ${s.critical} critical</span></div>`).join('')}</div><div class="card"><h3>Priority attention</h3>${metrics.sort((a,b)=>b.critical-a.critical||b.open-a.open||a.pct-b.pct).slice(0,8).map(x=>`<button class="list-link personOpen" data-emp="${x.employeeNumber}"><span>${esc(x.name)} · ${x.shift} · ${x.assignedLevel}</span><span class="pill ${x.critical?'critical':x.open?'nogo':x.pct>=90?'go':'ne'}">${x.pct}%</span></button>`).join('')}</div></div>`,`<button class="secondary" id="exportDash">Export dashboard CSV</button>`);$$('.personOpen').forEach(b=>b.onclick=()=>personDetail(b.dataset.emp));$('#exportDash').onclick=exportDashboard}
 function personnel(){
   page('Personnel Master','Search the central Personnel Master by employee number, name, shift, role, level, status, or qualified line',`<div class="filters"><input id="pSearch" type="search" inputmode="text" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="Search name or employee #"><select id="pShift"><option value="">All shifts</option>${['A','B','C','D'].map(x=>`<option>${x}</option>`).join('')}</select><select id="pStatus"><option value="">All statuses</option><option>Active</option><option>Leave of Absence</option><option>Inactive</option><option>Terminated</option><option>Vacant</option></select></div><div id="pSearchMeta" class="search-meta"></div><div id="ptable"></div>`,canManagePersonnel()?'<button class="primary" id="addPerson">Add personnel</button>':'');
   const normalizeValue=v=>String(v??'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[“”"']/g,'').replace(/[^a-zA-Z0-9\- ]/g,' ').replace(/\s+/g,' ').trim().toLowerCase();
@@ -205,22 +205,35 @@ function submitAssessment(){const emp=$('#aPerson').value,tid=$('#aTask').value,
 function sessionTable(rows){return`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Associate</th><th>Task</th><th>Evaluator</th><th>Method</th><th>Final status</th><th></th></tr></thead><tbody>${rows.map(s=>`<tr><td>${esc(s.date)}</td><td>${esc(s.associateName)}</td><td>${s.taskId} — ${esc(s.taskName)}</td><td>${esc(s.evaluatorName)}</td><td>${esc(s.method)}</td><td><span class="pill ${String(s.finalStatus).includes('CRITICAL')?'critical':String(s.finalStatus).includes('UNQUALIFIED')?'nogo':'go'}">${esc(s.finalStatus||s.status)}</span></td><td><button class="secondary sv" data-id="${s.id}">View</button></td></tr>`).join('')||'<tr><td colspan="7">No assessment sessions.</td></tr>'}</tbody></table></div>`}
 function sessionHistory(){const rows=[...state.sessions].sort((a,b)=>(b.date||'').localeCompare(a.date||''));page('Assessment History','Signed sessions remain preserved; reassessments are separate records',`<div class="filters"><input id="hSearch" placeholder="Search associate, task, evaluator"><select id="hResult"><option value="">All results</option><option>UNQUALIFIED</option><option>CRITICAL</option><option>RECORDED</option></select></div><div id="hTable"></div>`,'<button class="secondary" id="exportAssess">Export assessments CSV</button>');const draw=()=>{const q=$('#hSearch').value.toLowerCase(),r=$('#hResult').value;const f=rows.filter(s=>(s.associateName+' '+s.taskId+' '+s.taskName+' '+s.evaluatorName).toLowerCase().includes(q)&&(!r||String(s.finalStatus).includes(r)));$('#hTable').innerHTML=sessionTable(f);$$('.sv').forEach(b=>b.onclick=()=>sessionDetail(b.dataset.id))};$('#hSearch').oninput=draw;$('#hResult').oninput=draw;draw();$('#exportAssess').onclick=exportAssessments}
 function sessionDetail(id){const s=state.sessions.find(x=>x.id===id),rows=state.results.filter(r=>r.sessionId===id);page(`Assessment ${s.id}`,`${s.date} · ${esc(s.associateName)} · ${s.taskId}`,`<div class="card"><p><b>Evaluator:</b> ${esc(s.evaluatorName)} · <b>Method:</b> ${esc(s.method)} · <b>Location:</b> ${esc(s.location)}</p><p><b>Final status:</b> ${esc(s.finalStatus)}</p><p><b>Signature:</b> ${esc(s.signature)}</p><p><b>Reassessment:</b> ${esc(s.reassessmentDate||'Not scheduled')}</p></div><div class="table-wrap"><table><thead><tr><th>Subtask</th><th>Criticality</th><th>Result</th><th>Evidence</th><th>Observation</th><th>Verification</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.subtaskId} — ${esc(r.subtaskName)}</td><td>${esc(r.criticality)}</td><td>${esc(r.result)}</td><td>${esc(r.evidenceReference)}</td><td>${esc(r.observation)}</td><td>${esc(r.srLeadVerification)}</td></tr>`).join('')}</tbody></table></div>`,'<button class="secondary" id="backHist">Back</button>');$('#backHist').onclick=sessionHistory}
+function actionSearchText(value){
+  return String(value??'')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/\u00a0/g,' ')
+    .replace(/[^a-zA-Z0-9]+/g,' ')
+    .toLowerCase()
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
 function scheduledReassessmentRows(){
   const rows=[],seen=new Set(),todayISO=today();
+
   for(const s of (state.sessions||[])){
-    const reDate=String(s.reassessmentDate||'').trim();
+    const reDate=String(s?.reassessmentDate||'').trim();
     if(!reDate)continue;
 
-    const sourceId=String(s.id||'').trim();
-    const emp=String(s.employeeNumber||'').trim();
-    const task=String(s.taskId||'').trim();
-    const person=(state.personnel||[]).find(p=>String(p.employeeNumber||'').trim()===emp)||{};
+    const sourceId=String(s?.id||'').trim();
+    const emp=String(s?.employeeNumber||'').trim();
+    const task=String(s?.taskId||'').trim();
+    const person=(state.personnel||[]).find(
+      p=>String(p?.employeeNumber||'').trim()===emp
+    )||{};
 
-    // Only suppress the synthetic reassessment when the SAME assessment already
-    // has a real corrective-action record. Do not suppress it merely because the
-    // employee has another action for the same task.
+    // If the assessment already produced a real corrective action, that action
+    // is the source of truth and the synthetic reassessment row is not needed.
     const represented=(state.actions||[]).some(a=>
-      sourceId && String(a.sourceAssessmentId||'').trim()===sourceId
+      a && sourceId && String(a.sourceAssessmentId||'').trim()===sourceId
     );
     if(represented)continue;
 
@@ -246,59 +259,171 @@ function scheduledReassessmentRows(){
       created:s.date||''
     });
   }
+
   return rows;
 }
 window.scheduledReassessmentRows=scheduledReassessmentRows;
 
 function correctiveActionRepository(){
   reconcileCriticalGateActions();
+
   if(!Array.isArray(state.actions))state.actions=[];
   let changed=false;
+  const realRows=[];
 
-  for(const a of state.actions){
+  // Never discard a stored action. Normalize it and make sure the associate
+  // name can be resolved from Employee Number.
+  for(let i=0;i<state.actions.length;i++){
+    const raw=state.actions[i];
+    if(!raw || typeof raw!=='object')continue;
+
+    const a=raw;
     if(!a.id){a.id=uid('CA');changed=true}
-    const person=(state.personnel||[]).find(p=>String(p.employeeNumber||'')===String(a.employeeNumber||''));
-    if(!a.employee&&person?.name){a.employee=person.name;changed=true}
+
+    const emp=String(a.employeeNumber||'').trim();
+    const person=(state.personnel||[]).find(
+      p=>String(p?.employeeNumber||'').trim()===emp
+    );
+
+    if(!String(a.employee||'').trim() && person?.name){
+      a.employee=person.name;
+      changed=true;
+    }
 
     const rawStatus=String(a.status||'').trim().toLowerCase();
     const normalizedStatus=
       rawStatus==='closed'?'Closed':
-      (rawStatus==='upcoming'||rawStatus==='scheduled'||rawStatus==='pending'||rawStatus==='reassessment scheduled')?'Upcoming':
+      ['upcoming','scheduled','pending','reassessment scheduled','due soon'].includes(rawStatus)?'Upcoming':
       'Open';
 
-    if(a.status!==normalizedStatus){a.status=normalizedStatus;changed=true}
-    if(!a.criticality)a.criticality='Supporting';
+    if(a.status!==normalizedStatus){
+      a.status=normalizedStatus;
+      changed=true;
+    }
+
+    if(!a.criticality){
+      a.criticality='Supporting';
+      changed=true;
+    }
+
+    realRows.push(a);
   }
 
   if(changed)save();
 
-  return [...state.actions,...scheduledReassessmentRows()].sort((a,b)=>
-    (a.status==='Closed')-(b.status==='Closed') ||
-    (a.targetDate||'9999-12-31').localeCompare(b.targetDate||'9999-12-31') ||
-    (a.created||'').localeCompare(b.created||'')
-  );
-}
+  const combined=[...realRows,...scheduledReassessmentRows()];
 
+  return combined.sort((a,b)=>{
+    const aClosed=a.status==='Closed'?1:0;
+    const bClosed=b.status==='Closed'?1:0;
+    if(aClosed!==bClosed)return aClosed-bClosed;
+    return String(a.targetDate||'9999-12-31').localeCompare(
+      String(b.targetDate||'9999-12-31')
+    );
+  });
+}
 window.correctiveActionRepository=correctiveActionRepository;
 
 function actions(focusActionId=''){
-  const rows=correctiveActionRepository();
-  page('Corrective Actions & Reassessment','Original failed assessments remain unchanged; closure requires demonstrated competency',`<div class="filters"><select id="caStatus"><option value="">All statuses</option><option>Open</option><option>Upcoming</option><option>Closed</option></select><input id="caSearch" placeholder="Search associate or task"></div><div id="caTable"></div>`);
+  page(
+    'Corrective Actions & Reassessment',
+    'Original failed assessments remain unchanged; closure requires demonstrated competency',
+    `<div class="filters">
+      <select id="caStatus">
+        <option value="">All statuses</option>
+        <option>Open</option>
+        <option>Upcoming</option>
+        <option>Closed</option>
+      </select>
+      <input id="caSearch" type="search" autocomplete="off" autocorrect="off"
+        spellcheck="false" placeholder="Search associate, employee #, task, or subtask">
+    </div>
+    <div id="caTable"></div>`
+  );
+
   const draw=()=>{
-    const st=$('#caStatus').value,q=String($('#caSearch').value||'').toLowerCase().trim();
-    const f=rows.filter(a=>(!st||a.status===st)&&(`${a.employee||''} ${a.employeeNumber||''} ${a.taskId||''} ${a.subtaskId||''} ${a.id||''}`).toLowerCase().includes(q));
-    $('#caTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Associate</th><th>Task / Subtask</th><th>Due</th><th>Criticality</th><th>Status</th><th>Owner</th><th></th></tr></thead><tbody>${f.map(a=>`<tr class="${String(a.id)===String(focusActionId)?'focused-row':''}" data-action-row="${esc(a.id)}"><td>${esc(a.employee||'Unknown associate')}</td><td>${esc(a.taskId)} / ${esc(a.subtaskId)}</td><td class="${a.status!=='Closed'&&a.targetDate&&a.targetDate<today()?'overdue':''}">${esc(a.targetDate||'')}</td><td><span class="pill ${a.criticality==='Critical Gate'?'critical':'ne'}">${esc(a.criticality)}</span></td><td><span class="pill ${a.status==='Closed'?'go':a.status==='Upcoming'?'ne':'nogo'}">${esc(a.status)}</span></td><td>${esc(a.responsibleTrainer||a.owner||'')}</td><td><button class="secondary cav" data-id="${esc(a.id)}">Open</button></td></tr>`).join('')||'<tr><td colspan="7">No corrective actions.</td></tr>'}</tbody></table></div>`;
-    $$('.cav').forEach(b=>b.onclick=()=>{const row=rows.find(x=>String(x.id)===String(b.dataset.id));if(row?.recordType==='assessment')sessionDetail(row.sourceAssessmentId);else actionDetail(b.dataset.id)});
+    // Re-read the repository on every draw. This prevents the table from
+    // becoming stale if reconciliation or another view modifies actions.
+    const rows=correctiveActionRepository();
+    const st=String($('#caStatus')?.value||'').trim();
+    const query=actionSearchText($('#caSearch')?.value||'');
+    const queryTokens=query?query.split(' ').filter(Boolean):[];
+
+    const filtered=rows.filter(a=>{
+      if(st && String(a.status||'')!==st)return false;
+
+      const emp=String(a.employeeNumber||'').trim();
+      const person=(state.personnel||[]).find(
+        p=>String(p?.employeeNumber||'').trim()===emp
+      )||{};
+
+      const haystack=actionSearchText([
+        a.employee,
+        person.name,
+        a.employeeNumber,
+        a.taskId,
+        a.subtaskId,
+        a.id,
+        a.criticality,
+        a.status,
+        a.responsibleTrainer,
+        a.owner
+      ].filter(Boolean).join(' '));
+
+      return queryTokens.every(token=>haystack.includes(token));
+    });
+
+    $('#caTable').innerHTML=`
+      <div class="card" style="padding:12px 16px;margin-bottom:12px">
+        <small><b>${filtered.length}</b> shown · <b>${rows.length}</b> total corrective actions/reassessments</small>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Associate</th><th>Task / Subtask</th><th>Due</th>
+          <th>Criticality</th><th>Status</th><th>Owner</th><th></th>
+        </tr></thead>
+        <tbody>${
+          filtered.map(a=>`<tr class="${String(a.id)===String(focusActionId)?'focused-row':''}" data-action-row="${esc(a.id)}">
+            <td>${esc(a.employee||'Unknown associate')}${a.employeeNumber?`<small style="display:block">#${esc(a.employeeNumber)}</small>`:''}</td>
+            <td>${esc(a.taskId||'')} / ${esc(a.subtaskId||'')}</td>
+            <td class="${a.status!=='Closed'&&a.targetDate&&a.targetDate<today()?'overdue':''}">${esc(a.targetDate||'')}</td>
+            <td><span class="pill ${a.criticality==='Critical Gate'?'critical':'ne'}">${esc(a.criticality||'')}</span></td>
+            <td><span class="pill ${a.status==='Closed'?'go':a.status==='Upcoming'?'ne':'nogo'}">${esc(a.status||'')}</span></td>
+            <td>${esc(a.responsibleTrainer||a.owner||'')}</td>
+            <td><button class="secondary cav" data-id="${esc(a.id)}">Open</button></td>
+          </tr>`).join('') ||
+          '<tr><td colspan="7">No corrective actions match the current filters.</td></tr>'
+        }</tbody>
+      </table></div>`;
+
+    $$('.cav').forEach(b=>b.onclick=()=>{
+      const currentRows=correctiveActionRepository();
+      const row=currentRows.find(x=>String(x.id)===String(b.dataset.id));
+      if(row?.recordType==='assessment')sessionDetail(row.sourceAssessmentId);
+      else actionDetail(b.dataset.id);
+    });
   };
-  $('#caStatus').oninput=draw;$('#caSearch').oninput=draw;draw();
+
+  $('#caStatus').addEventListener('change',draw);
+  $('#caSearch').addEventListener('input',draw);
+  $('#caSearch').addEventListener('search',draw);
+  draw();
+
   if(focusActionId){
-    const target=rows.find(a=>String(a.id)===String(focusActionId));
-    if(target)setTimeout(()=>{
-      if(target.recordType==='assessment')sessionDetail(target.sourceAssessmentId);
-      else actionDetail(target.id);
-    },0);else toast('Corrective action or reassessment not found');
+    const target=correctiveActionRepository().find(
+      a=>String(a.id)===String(focusActionId)
+    );
+    if(target){
+      setTimeout(()=>{
+        if(target.recordType==='assessment')sessionDetail(target.sourceAssessmentId);
+        else actionDetail(target.id);
+      },0);
+    }else{
+      toast('Corrective action or reassessment not found');
+    }
   }
 }
+
 function actionDetail(id){const a=state.actions.find(x=>x.id===id);modal(`<h2>Corrective Action ${a.id}</h2><div class="form-grid"><label>Associate<input value="${esc(a.employee)}" readonly></label><label>Task / Subtask<input value="${a.taskId} / ${a.subtaskId}" readonly></label><label class="full">Standard not met<textarea id="caStd">${esc(a.standardNotMet||a.observation)}</textarea></label><label class="full">Immediate coaching<textarea id="caCoach">${esc(a.immediateCoaching)}</textarea></label><label class="full">Required retraining<textarea id="caTrain">${esc(a.requiredRetraining)}</textarea></label><label>Responsible trainer<input id="caOwner" value="${esc(a.responsibleTrainer||a.owner)}"></label><label>Target completion<input id="caDue" type="date" value="${esc(a.targetDate)}"></label><label>Reassessment date<input id="caRe" type="date" value="${esc(a.reassessmentDate)}"></label><label>Reassessment result<select id="caResult"><option></option>${['GO','NO-GO','REQUIRES ASSISTANCE'].map(x=>`<option ${a.reassessmentResult===x?'selected':''}>${x}</option>`).join('')}</select></label></div><div class="actions"><button class="primary" id="saveCA">Save</button>${a.status!=='Closed'?'<button class="secondary" id="closeCA">Close after demonstrated competency</button>':''}<button class="secondary close">Cancel</button></div>`);$('#saveCA').onclick=()=>{const old=clone(a);Object.assign(a,{standardNotMet:$('#caStd').value,immediateCoaching:$('#caCoach').value,requiredRetraining:$('#caTrain').value,responsibleTrainer:$('#caOwner').value,targetDate:$('#caDue').value,reassessmentDate:$('#caRe').value,reassessmentResult:$('#caResult').value});audit('UPDATE','Corrective Action',a.id,'Action plan updated',old,a);closeModal();actions()};if($('#closeCA'))$('#closeCA').onclick=()=>{if($('#caResult').value!=='GO')return toast('A GO reassessment is required before closure');const old=clone(a);Object.assign(a,{reassessmentResult:'GO',status:'Closed',closureDate:new Date().toISOString(),closedBy:currentUser.name,closureAuthority:currentUser.maxLevel});audit('CLOSE','Corrective Action',a.id,'Closed after GO reassessment',old,a);closeModal();actions()}}
 function buildNotifications(){
   const n=[],now=today();
