@@ -205,31 +205,78 @@ function submitAssessment(){const emp=$('#aPerson').value,tid=$('#aTask').value,
 function sessionTable(rows){return`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Associate</th><th>Task</th><th>Evaluator</th><th>Method</th><th>Final status</th><th></th></tr></thead><tbody>${rows.map(s=>`<tr><td>${esc(s.date)}</td><td>${esc(s.associateName)}</td><td>${s.taskId} — ${esc(s.taskName)}</td><td>${esc(s.evaluatorName)}</td><td>${esc(s.method)}</td><td><span class="pill ${String(s.finalStatus).includes('CRITICAL')?'critical':String(s.finalStatus).includes('UNQUALIFIED')?'nogo':'go'}">${esc(s.finalStatus||s.status)}</span></td><td><button class="secondary sv" data-id="${s.id}">View</button></td></tr>`).join('')||'<tr><td colspan="7">No assessment sessions.</td></tr>'}</tbody></table></div>`}
 function sessionHistory(){const rows=[...state.sessions].sort((a,b)=>(b.date||'').localeCompare(a.date||''));page('Assessment History','Signed sessions remain preserved; reassessments are separate records',`<div class="filters"><input id="hSearch" placeholder="Search associate, task, evaluator"><select id="hResult"><option value="">All results</option><option>UNQUALIFIED</option><option>CRITICAL</option><option>RECORDED</option></select></div><div id="hTable"></div>`,'<button class="secondary" id="exportAssess">Export assessments CSV</button>');const draw=()=>{const q=$('#hSearch').value.toLowerCase(),r=$('#hResult').value;const f=rows.filter(s=>(s.associateName+' '+s.taskId+' '+s.taskName+' '+s.evaluatorName).toLowerCase().includes(q)&&(!r||String(s.finalStatus).includes(r)));$('#hTable').innerHTML=sessionTable(f);$$('.sv').forEach(b=>b.onclick=()=>sessionDetail(b.dataset.id))};$('#hSearch').oninput=draw;$('#hResult').oninput=draw;draw();$('#exportAssess').onclick=exportAssessments}
 function sessionDetail(id){const s=state.sessions.find(x=>x.id===id),rows=state.results.filter(r=>r.sessionId===id);page(`Assessment ${s.id}`,`${s.date} · ${esc(s.associateName)} · ${s.taskId}`,`<div class="card"><p><b>Evaluator:</b> ${esc(s.evaluatorName)} · <b>Method:</b> ${esc(s.method)} · <b>Location:</b> ${esc(s.location)}</p><p><b>Final status:</b> ${esc(s.finalStatus)}</p><p><b>Signature:</b> ${esc(s.signature)}</p><p><b>Reassessment:</b> ${esc(s.reassessmentDate||'Not scheduled')}</p></div><div class="table-wrap"><table><thead><tr><th>Subtask</th><th>Criticality</th><th>Result</th><th>Evidence</th><th>Observation</th><th>Verification</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.subtaskId} — ${esc(r.subtaskName)}</td><td>${esc(r.criticality)}</td><td>${esc(r.result)}</td><td>${esc(r.evidenceReference)}</td><td>${esc(r.observation)}</td><td>${esc(r.srLeadVerification)}</td></tr>`).join('')}</tbody></table></div>`,'<button class="secondary" id="backHist">Back</button>');$('#backHist').onclick=sessionHistory}
+function scheduledReassessmentRows(){
+  const rows=[],seen=new Set(),todayISO=today();
+  for(const s of (state.sessions||[])){
+    const reDate=String(s.reassessmentDate||'').trim();
+    if(!reDate)continue;
+
+    const sourceId=String(s.id||'').trim();
+    const emp=String(s.employeeNumber||'').trim();
+    const task=String(s.taskId||'').trim();
+    const person=(state.personnel||[]).find(p=>String(p.employeeNumber||'').trim()===emp)||{};
+
+    // Only suppress the synthetic reassessment when the SAME assessment already
+    // has a real corrective-action record. Do not suppress it merely because the
+    // employee has another action for the same task.
+    const represented=(state.actions||[]).some(a=>
+      sourceId && String(a.sourceAssessmentId||'').trim()===sourceId
+    );
+    if(represented)continue;
+
+    const key=[sourceId,emp,task,reDate].join('|');
+    if(seen.has(key))continue;
+    seen.add(key);
+
+    rows.push({
+      id:'RE-'+(sourceId||uid('RE')),
+      employeeNumber:emp,
+      employee:s.associateName||person.name||'Unknown associate',
+      shift:s.shift||person.shift||'',
+      taskId:task,
+      subtaskId:'Reassessment',
+      targetDate:reDate,
+      reassessmentDate:reDate,
+      status:reDate>=todayISO?'Upcoming':'Open',
+      criticality:'Supporting',
+      responsibleTrainer:s.evaluatorName||'',
+      owner:s.evaluatorName||'',
+      recordType:'assessment',
+      sourceAssessmentId:sourceId,
+      created:s.date||''
+    });
+  }
+  return rows;
+}
+window.scheduledReassessmentRows=scheduledReassessmentRows;
+
 function correctiveActionRepository(){
   reconcileCriticalGateActions();
   if(!Array.isArray(state.actions))state.actions=[];
   let changed=false;
+
   for(const a of state.actions){
     if(!a.id){a.id=uid('CA');changed=true}
-    const person=state.personnel.find(p=>String(p.employeeNumber||'')===String(a.employeeNumber||''));
+    const person=(state.personnel||[]).find(p=>String(p.employeeNumber||'')===String(a.employeeNumber||''));
     if(!a.employee&&person?.name){a.employee=person.name;changed=true}
-    const rawStatus=String(a.status||'').trim().toLowerCase();const normalizedStatus=rawStatus==='closed'?'Closed':rawStatus==='upcoming'?'Upcoming':'Open';
+
+    const rawStatus=String(a.status||'').trim().toLowerCase();
+    const normalizedStatus=
+      rawStatus==='closed'?'Closed':
+      (rawStatus==='upcoming'||rawStatus==='scheduled'||rawStatus==='pending'||rawStatus==='reassessment scheduled')?'Upcoming':
+      'Open';
+
     if(a.status!==normalizedStatus){a.status=normalizedStatus;changed=true}
     if(!a.criticality)a.criticality='Supporting';
   }
+
   if(changed)save();
-  // Reassessments scheduled in assessment history are also work items in this view.
-  // Expose them as read-only Upcoming rows unless a corrective-action record already represents them.
-  const todayISO=today();
-  const upcoming=(state.sessions||[]).filter(s=>s.reassessmentDate&&s.reassessmentDate>=todayISO).filter(s=>!state.actions.some(a=>
-    String(a.sourceAssessmentId||'')===String(s.id||'') ||
-    (a.status!=='Closed'&&String(a.employeeNumber||'')===String(s.employeeNumber||'')&&String(a.taskId||'')===String(s.taskId||''))
-  )).map(s=>({
-    id:'RE-'+String(s.id||uid('RE')),employeeNumber:String(s.employeeNumber||''),employee:s.associateName||'',shift:s.shift||'',
-    taskId:s.taskId||'',subtaskId:'Reassessment',targetDate:s.reassessmentDate,reassessmentDate:s.reassessmentDate,status:'Upcoming',
-    criticality:'Supporting',responsibleTrainer:s.evaluatorName||'',owner:s.evaluatorName||'',recordType:'assessment',sourceAssessmentId:String(s.id||''),created:s.date||''
-  }));
-  return [...state.actions,...upcoming].sort((a,b)=>(a.status==='Closed')-(b.status==='Closed')||(a.targetDate||'9999-12-31').localeCompare(b.targetDate||'9999-12-31')||(a.created||'').localeCompare(b.created||''));
+
+  return [...state.actions,...scheduledReassessmentRows()].sort((a,b)=>
+    (a.status==='Closed')-(b.status==='Closed') ||
+    (a.targetDate||'9999-12-31').localeCompare(b.targetDate||'9999-12-31') ||
+    (a.created||'').localeCompare(b.created||'')
+  );
 }
 
 window.correctiveActionRepository=correctiveActionRepository;
@@ -246,17 +293,47 @@ function actions(focusActionId=''){
   $('#caStatus').oninput=draw;$('#caSearch').oninput=draw;draw();
   if(focusActionId){
     const target=rows.find(a=>String(a.id)===String(focusActionId));
-    if(target)setTimeout(()=>actionDetail(target.id),0);else toast('Corrective action not found');
+    if(target)setTimeout(()=>{
+      if(target.recordType==='assessment')sessionDetail(target.sourceAssessmentId);
+      else actionDetail(target.id);
+    },0);else toast('Corrective action or reassessment not found');
   }
 }
 function actionDetail(id){const a=state.actions.find(x=>x.id===id);modal(`<h2>Corrective Action ${a.id}</h2><div class="form-grid"><label>Associate<input value="${esc(a.employee)}" readonly></label><label>Task / Subtask<input value="${a.taskId} / ${a.subtaskId}" readonly></label><label class="full">Standard not met<textarea id="caStd">${esc(a.standardNotMet||a.observation)}</textarea></label><label class="full">Immediate coaching<textarea id="caCoach">${esc(a.immediateCoaching)}</textarea></label><label class="full">Required retraining<textarea id="caTrain">${esc(a.requiredRetraining)}</textarea></label><label>Responsible trainer<input id="caOwner" value="${esc(a.responsibleTrainer||a.owner)}"></label><label>Target completion<input id="caDue" type="date" value="${esc(a.targetDate)}"></label><label>Reassessment date<input id="caRe" type="date" value="${esc(a.reassessmentDate)}"></label><label>Reassessment result<select id="caResult"><option></option>${['GO','NO-GO','REQUIRES ASSISTANCE'].map(x=>`<option ${a.reassessmentResult===x?'selected':''}>${x}</option>`).join('')}</select></label></div><div class="actions"><button class="primary" id="saveCA">Save</button>${a.status!=='Closed'?'<button class="secondary" id="closeCA">Close after demonstrated competency</button>':''}<button class="secondary close">Cancel</button></div>`);$('#saveCA').onclick=()=>{const old=clone(a);Object.assign(a,{standardNotMet:$('#caStd').value,immediateCoaching:$('#caCoach').value,requiredRetraining:$('#caTrain').value,responsibleTrainer:$('#caOwner').value,targetDate:$('#caDue').value,reassessmentDate:$('#caRe').value,reassessmentResult:$('#caResult').value});audit('UPDATE','Corrective Action',a.id,'Action plan updated',old,a);closeModal();actions()};if($('#closeCA'))$('#closeCA').onclick=()=>{if($('#caResult').value!=='GO')return toast('A GO reassessment is required before closure');const old=clone(a);Object.assign(a,{reassessmentResult:'GO',status:'Closed',closureDate:new Date().toISOString(),closedBy:currentUser.name,closureAuthority:currentUser.maxLevel});audit('CLOSE','Corrective Action',a.id,'Closed after GO reassessment',old,a);closeModal();actions()}}
 function buildNotifications(){
   const n=[],now=today();
-  for(const a of correctiveActionRepository())if(a.status!=='Closed'){
-    if(a.targetDate&&a.targetDate<now)n.push({type:'Overdue Corrective Action',severity:'high',text:`${a.employee} — ${a.taskId}/${a.subtaskId} was due ${a.targetDate}`,recordType:'correctiveAction',recordId:a.id});
-    else n.push({type:'Open Corrective Action',severity:a.criticality==='Critical Gate'?'high':'medium',text:`${a.employee} — ${a.taskId}/${a.subtaskId}`,recordType:'correctiveAction',recordId:a.id});
+  for(const a of correctiveActionRepository()){
+    if(a.status==='Closed')continue;
+
+    if(a.recordType==='assessment'){
+      n.push({
+        type:'Reassessment Due',
+        severity:a.reassessmentDate&&a.reassessmentDate<now?'high':'medium',
+        text:`${a.employee} — ${a.taskId} due ${a.reassessmentDate||a.targetDate||''}`,
+        recordType:'assessment',
+        recordId:a.sourceAssessmentId
+      });
+      continue;
+    }
+
+    if(a.targetDate&&a.targetDate<now){
+      n.push({
+        type:'Overdue Corrective Action',
+        severity:'high',
+        text:`${a.employee} — ${a.taskId}/${a.subtaskId} was due ${a.targetDate}`,
+        recordType:'correctiveAction',
+        recordId:a.id
+      });
+    }else{
+      n.push({
+        type:'Open Corrective Action',
+        severity:a.criticality==='Critical Gate'?'high':'medium',
+        text:`${a.employee} — ${a.taskId}/${a.subtaskId}`,
+        recordType:'correctiveAction',
+        recordId:a.id
+      });
+    }
   }
-  for(const s of state.sessions)if(s.reassessmentDate&&s.reassessmentDate<=new Date(Date.now()+state.settings.reassessmentWarningDays*86400000).toISOString().slice(0,10))n.push({type:'Reassessment Due',severity:s.reassessmentDate<now?'high':'medium',text:`${s.associateName} — ${s.taskId} due ${s.reassessmentDate}`,recordType:'assessment',recordId:s.id});
   return n;
 }
 function notificationView(){
