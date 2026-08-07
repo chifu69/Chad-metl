@@ -1,4 +1,4 @@
-const CACHE='rp-v9.8.4-corrective-search-sync-fix';
+const CACHE='rp-v9.8.5-corrective-card-render-fix';
 const ASSETS=[
   './',
   './index.html',

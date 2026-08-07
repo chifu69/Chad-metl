@@ -342,8 +342,6 @@ function actions(focusActionId=''){
   );
 
   const draw=()=>{
-    // Re-read the repository on every draw. This prevents the table from
-    // becoming stale if reconciliation or another view modifies actions.
     const rows=correctiveActionRepository();
     const st=String($('#caStatus')?.value||'').trim();
     const query=actionSearchText($('#caSearch')?.value||'');
@@ -373,28 +371,51 @@ function actions(focusActionId=''){
       return queryTokens.every(token=>haystack.includes(token));
     });
 
+    const cards=filtered.map(a=>{
+      const overdue=a.status!=='Closed'&&a.targetDate&&a.targetDate<today();
+      const statusClass=a.status==='Closed'?'go':a.status==='Upcoming'?'ne':'nogo';
+      const critClass=a.criticality==='Critical Gate'?'critical':'ne';
+
+      return `<article class="ca-record ${String(a.id)===String(focusActionId)?'focused-row':''}" data-action-row="${esc(a.id)}">
+        <div class="ca-record-head">
+          <div>
+            <small>Associate</small>
+            <h3>${esc(a.employee||'Unknown associate')}</h3>
+            ${a.employeeNumber?`<span class="ca-employee-number">#${esc(a.employeeNumber)}</span>`:''}
+          </div>
+          <span class="pill ${statusClass}">${esc(a.status||'')}</span>
+        </div>
+
+        <div class="ca-record-grid">
+          <div>
+            <small>Task / Subtask</small>
+            <b>${esc(a.taskId||'')} / ${esc(a.subtaskId||'')}</b>
+          </div>
+          <div>
+            <small>Due</small>
+            <b class="${overdue?'overdue':''}">${esc(a.targetDate||'—')}</b>
+          </div>
+          <div>
+            <small>Criticality</small>
+            <span class="pill ${critClass}">${esc(a.criticality||'Supporting')}</span>
+          </div>
+          <div>
+            <small>Owner</small>
+            <b>${esc(a.responsibleTrainer||a.owner||'—')}</b>
+          </div>
+        </div>
+
+        <button class="secondary cav ca-open-btn" data-id="${esc(a.id)}">Open</button>
+      </article>`;
+    }).join('');
+
     $('#caTable').innerHTML=`
-      <div class="card" style="padding:12px 16px;margin-bottom:12px">
+      <div class="card ca-count-card">
         <small><b>${filtered.length}</b> shown · <b>${rows.length}</b> total corrective actions/reassessments</small>
       </div>
-      <div class="table-wrap"><table>
-        <thead><tr>
-          <th>Associate</th><th>Task / Subtask</th><th>Due</th>
-          <th>Criticality</th><th>Status</th><th>Owner</th><th></th>
-        </tr></thead>
-        <tbody>${
-          filtered.map(a=>`<tr class="${String(a.id)===String(focusActionId)?'focused-row':''}" data-action-row="${esc(a.id)}">
-            <td>${esc(a.employee||'Unknown associate')}${a.employeeNumber?`<small style="display:block">#${esc(a.employeeNumber)}</small>`:''}</td>
-            <td>${esc(a.taskId||'')} / ${esc(a.subtaskId||'')}</td>
-            <td class="${a.status!=='Closed'&&a.targetDate&&a.targetDate<today()?'overdue':''}">${esc(a.targetDate||'')}</td>
-            <td><span class="pill ${a.criticality==='Critical Gate'?'critical':'ne'}">${esc(a.criticality||'')}</span></td>
-            <td><span class="pill ${a.status==='Closed'?'go':a.status==='Upcoming'?'ne':'nogo'}">${esc(a.status||'')}</span></td>
-            <td>${esc(a.responsibleTrainer||a.owner||'')}</td>
-            <td><button class="secondary cav" data-id="${esc(a.id)}">Open</button></td>
-          </tr>`).join('') ||
-          '<tr><td colspan="7">No corrective actions match the current filters.</td></tr>'
-        }</tbody>
-      </table></div>`;
+      <div class="ca-record-list">
+        ${cards || '<div class="card ca-empty">No corrective actions match the current filters.</div>'}
+      </div>`;
 
     $$('.cav').forEach(b=>b.onclick=()=>{
       const currentRows=correctiveActionRepository();
@@ -415,9 +436,9 @@ function actions(focusActionId=''){
     );
     if(target){
       setTimeout(()=>{
-        if(target.recordType==='assessment')sessionDetail(target.sourceAssessmentId);
-        else actionDetail(target.id);
-      },0);
+        const el=document.querySelector(`[data-action-row="${CSS.escape(String(target.id))}"]`);
+        if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
+      },100);
     }else{
       toast('Corrective action or reassessment not found');
     }
