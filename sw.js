@@ -1,4 +1,4 @@
-const CACHE='rp-v9.9.1-assessment-associate-search-fix';
+const CACHE='rp-v9.9.2-assessment-search-admin-export-fix';
 const ASSETS=[
   './',
   './index.html',

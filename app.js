@@ -893,10 +893,107 @@ function settings(){
   $('#exportTasks').onclick=exportTasks;
   $('#exportAssess2').onclick=exportAssessments;
 }
+
+function exportPersonnel(){
+  const h=['Department','Position ID','Employee #','Name','Shift','Role','Status','Assigned Level','Approved Level','Qualified Lines','Hire Date','Extrusion Date','Supervisor','Notes'];
+  const rows=[
+    h,
+    ...state.personnel.map(p=>[
+      departmentName(p.departmentId),
+      p.positionId,
+      p.employeeNumber,
+      p.name,
+      p.shift,
+      p.role,
+      p.status,
+      p.assignedLevel,
+      p.approvedLevel,
+      p.qualifiedLines,
+      p.hireDate,
+      p.extrusionDate,
+      p.supervisor,
+      p.notes
+    ])
+  ];
+  download(csv(rows),`METL-personnel-${today()}.csv`);
+}
+
+function exportTasks(){
+  const h=['Department','Record Type','Task ID','Subtask ID','Name','Domain','Level','Criticality','Standard','Evidence','Source','Status','Revision'];
+  const rows=[
+    h,
+    ...state.tasks.map(t=>[
+      departmentName(t.departmentId),
+      'Task',
+      t.id,
+      '',
+      t.name,
+      t.domain,
+      t.requiredLevel,
+      '',
+      t.trainedStandard,
+      '',
+      t.source,
+      t.status,
+      t.revision
+    ]),
+    ...state.subtasks.map(s=>[
+      departmentName(
+        s.departmentId ||
+        state.tasks.find(t=>t.id===s.taskId&&t.status!=='Superseded')?.departmentId
+      ),
+      'Subtask',
+      s.taskId,
+      s.id,
+      s.name,
+      s.domain,
+      s.requiredLevel,
+      s.criticality,
+      s.standard,
+      s.evidence,
+      s.source,
+      s.status,
+      s.revisionNote
+    ])
+  ];
+  download(csv(rows),`METL-task-library-${today()}.csv`);
+}
+
+function exportAssessments(){
+  const h=['Department','Session ID','Date','Employee #','Associate','Shift','Role','Task ID','Task Name','Subtask ID','Subtask Name','Criticality','Result','Evidence','Observation','Evaluator','Final Status','Reassessment Date'];
+  const rows=[
+    h,
+    ...state.results.map(r=>{
+      const s=state.sessions.find(x=>x.id===r.sessionId)||{};
+      return[
+        departmentName(r.departmentId||s.departmentId),
+        r.sessionId,
+        r.date,
+        r.employeeNumber,
+        r.associateName,
+        r.shift,
+        r.role,
+        r.taskId,
+        r.taskName,
+        r.subtaskId,
+        r.subtaskName,
+        r.criticality,
+        r.result,
+        r.evidenceReference,
+        r.observation,
+        r.evaluatorName,
+        s.finalStatus,
+        s.reassessmentDate
+      ];
+    })
+  ];
+  download(csv(rows),`METL-assessments-${today()}.csv`);
+}
+
 function restoreBackup(e){const f=e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const obj=JSON.parse(reader.result);state=normalize(obj);audit('RESTORE','System','backup','JSON backup restored');toast('Backup restored');dashboard()}catch{toast('Invalid backup file')}};reader.readAsText(f)}
 function modal(html){document.body.insertAdjacentHTML('beforeend',`<div class="modal"><div class="modal-card">${html}</div></div>`);$$('.close').forEach(b=>b.onclick=closeModal)} function closeModal(){$('.modal')?.remove()}
 $('#langEn').onclick=()=>applyLanguage('en');$('#langEs').onclick=()=>applyLanguage('es');if($('#languageMenuBtn'))$('#languageMenuBtn').onclick=()=>{const menu=$('#languageMenu');const opening=menu.classList.contains('hidden');menu.classList.toggle('hidden');$('#languageMenuBtn').setAttribute('aria-expanded',opening?'true':'false')};document.addEventListener('click',e=>{const wrap=e.target.closest?.('.login-language');if(!wrap){$('#languageMenu')?.classList.add('hidden');$('#languageMenuBtn')?.setAttribute('aria-expanded','false')}});applyLanguage(uiLanguage,false);$('#loginBtn').onclick=login;$('#pin').onkeydown=e=>{if(e.key==='Enter')login()};$('#changePasswordBtn').onclick=changePassword;$('#profileBtn').onclick=()=>navigate('profile');$('#serverConfigBtn').onclick=()=>window.RpiaServerSetup.open();$('#logoutBtn').onclick=logout;$('#menuBtn').onclick=()=>{$('#nav').classList.toggle('open');$('#navScrim').classList.toggle('open')};$('#navScrim').onclick=()=>{$('#nav').classList.remove('open');$('#navScrim').classList.remove('open')};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=9.9.1').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=9.9.2').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});
 
 /* RP v6.1 — core compliance implementation overrides */
 function matrixView(){
