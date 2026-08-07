@@ -1,4 +1,4 @@
-/* RP IA Enterprise Platform v8.0 — architecture and experience layer */
+/* RP Enterprise Platform v8.0 — architecture and experience layer */
 (function(){
   'use strict';
   const VERSION='9.2.0';
@@ -16,7 +16,7 @@
 
   const safeCount=(fn)=>{try{return fn()}catch{return 0}};
   const engineDefinitions=[
-    ['Eagle AI','Coordinates every engine and returns one clear answer.'],
+    ['Eagle','Coordinates every engine and returns one clear answer.'],
     ['Natural Language Engine','Understands intent, entities, language, and conversational context.'],
     ['Reasoning Engine','Explains the facts, rules, and evidence behind each conclusion.'],
     ['Workflow Engine','Runs corrective-action, reassessment, approval, and qualification workflows.'],
@@ -79,7 +79,7 @@
       else if(name==='Experience Engine'){detail=`${safeCount(()=>ExperienceEngine.patterns().length)} experience patterns calculated.`}
       else if(name==='Certification Engine'){detail=`${safeCount(()=>CertificationEngine.expiring().length)} certifications approaching expiration.`}
       else if(name==='Natural Language Engine'){NaturalLanguageEngine.parse('What does John Smith need to advance?');detail='Intent and entity parser responded.'}
-      else if(name==='Eagle AI'){detail='Brain routing, search, rules, knowledge, and coaching connections available.'}
+      else if(name==='Eagle'){detail='Brain routing, search, rules, knowledge, and coaching connections available.'}
       else detail='Foundation loaded and dependencies available.';
     }catch(err){status='Error';detail=err.message||String(err)}
     const ms=Math.max(1,Math.round(performance.now()-start));
@@ -98,7 +98,7 @@
       if(parsed.intent==='knowledge')sources.push('Knowledge Engine');
       if(parsed.intent==='actions')sources.push('Workflow Engine');
       sources.push('Audit Engine');
-      return{intent:parsed.intent,sources,summary:`Eagle AI interpreted this as “${parsed.intent}” and consulted ${sources.join(', ')}.`};
+      return{intent:parsed.intent,sources,summary:`Eagle interpreted this as “${parsed.intent}” and consulted ${sources.join(', ')}.`};
     }
   };
 
@@ -121,7 +121,7 @@
   };
 
   function askBrainCard(){
-    return `<section class="card dashboard-brain"><div class="dashboard-card-head"><div><span class="ai-badge">Powered by RP IA</span><h2>Ask Eagle AI</h2></div><span class="brain-orb"><img src="rpia-eagle-192.png" alt="Eagle AI" class="eagle-mini"></span></div><p>Ask about readiness, employees, tasks, corrective actions, qualifications, or approved procedures.</p><div class="ask-row compact"><input id="dashBrainQuestion" placeholder="Example: What does John Smith need to advance?"><button class="primary" id="dashAskBrain">Ask</button></div><div id="dashBrainAnswer" class="ai-answer compact-answer">Ask a question or open the full conversation.</div><div class="actions"><button class="secondary" id="openFullBrain">Open full conversation</button></div></section>`;
+    return `<section class="card dashboard-brain"><div class="dashboard-card-head"><div><span class="ai-badge">Powered by RP</span><h2>Ask Eagle</h2></div><span class="brain-orb"><img src="rpia-eagle-192.png" alt="Eagle" class="eagle-mini"></span></div><p>Ask about readiness, employees, tasks, corrective actions, qualifications, or approved procedures.</p><div class="ask-row compact"><input id="dashBrainQuestion" placeholder="Example: What does John Smith need to advance?"><button class="primary" id="dashAskBrain">Ask</button></div><div id="dashBrainAnswer" class="ai-answer compact-answer">Ask a question or open the full conversation.</div><div class="actions"><button class="secondary" id="openFullBrain">Open full conversation</button></div></section>`;
   }
 
   function metricButton(value,label,cls,target){return `<button class="kpi metric-link ${cls||''}" data-metric="${target}"><b>${value}</b><span>${label}</span></button>`}
@@ -151,7 +151,7 @@
     const statusTone=critical.length?'red':overdue.length?'amber':readiness>=85?'green':'blue';
     page('Dashboard','',`
       <section class="command-hero ${statusTone}">
-        <div class="command-greeting"><span class="eyebrow">Eagle AI Operational Briefing</span><h1>${greeting}, ${userName}.</h1><p>Eagle AI reviewed the current competency records and selected the work with the highest operational impact.</p></div>
+        <div class="command-greeting"><span class="eyebrow">Eagle Operational Briefing</span><h1>${greeting}, ${userName}.</h1><p>Eagle reviewed the current competency records and selected the work with the highest operational impact.</p></div>
         <div class="command-status"><small>Plant status</small><b>${status}</b><span>Last analysis ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span></div>
       </section>
       <section class="command-summary">
@@ -164,13 +164,13 @@
       <section class="priority-command card ${missions[0].tone}"><div class="priority-icon">${missions[0].icon}</div><div><span class="eyebrow">Highest Priority</span><h2>${escV(missions[0].title)}</h2><p>${escV(missions[0].detail)}</p></div><button class="primary" id="commandResolve">Resolve Now</button></section>
       <div class="command-grid">
         <section class="card mission-command"><div class="section-title"><div><span class="eyebrow">Today's Mission</span><h2>Start with what matters most</h2></div><b>${missions.length} priorities</b></div><div class="mission-progress"><span style="width:0%"></span></div><div class="command-mission-list">${missions.slice(0,4).map((m,i)=>`<button data-target="${m.target}" class="command-mission ${m.tone}"><i>${m.icon}</i><span><b>${i+1}. ${escV(m.title)}</b><small>${escV(m.detail)}</small></span><em>Open →</em></button>`).join('')}</div></section>
-        <section class="card eagle-command"><span class="eyebrow">Ask Eagle AI</span><h2>Get an answer or open the exact record</h2><p>Search employees, qualifications, actions, tasks, and approved procedures.</p><div class="ask-row"><input id="dashBrainQuestion" placeholder="What does John Smith need to advance?"><button class="primary" id="dashAskBrain">Ask</button></div><div id="dashBrainAnswer" class="ai-answer">Eagle AI is ready.</div><button class="secondary" id="openFullBrain">Open full conversation</button></section>
+        <section class="card eagle-command"><span class="eyebrow">Ask Eagle</span><h2>Get an answer or open the exact record</h2><p>Search employees, qualifications, actions, tasks, and approved procedures.</p><div class="ask-row"><input id="dashBrainQuestion" placeholder="What does John Smith need to advance?"><button class="primary" id="dashAskBrain">Ask</button></div><div id="dashBrainAnswer" class="ai-answer">Eagle is ready.</div><button class="secondary" id="openFullBrain">Open full conversation</button></section>
       </div>
       <section class="card shift-command"><div class="section-title"><div><span class="eyebrow">Readiness by Shift</span><h2>Coverage at a glance</h2></div></div><div class="shift-bars">${shifts.map(s=>`<button data-shift="${s.shift}"><b>${s.shift} Shift</b><span><i style="width:${s.pct}%"></i></span><em>${s.pct}% · ${s.count} active</em></button>`).join('')}</div></section>`);
     const openTarget=t=>{if(t==='ready')return navigate('personnel');if(t==='matrix'||t==='readiness')return navigate('matrix');if(t==='assessments')return navigate('assessments');if(['critical','open','overdue'].includes(t))return navigate('actions')};
     $$q('[data-target]').forEach(b=>b.onclick=()=>openTarget(b.dataset.target));$q('#commandResolve').onclick=()=>openTarget(missions[0].target);
     $$q('[data-shift]').forEach(b=>b.onclick=()=>{navigate('matrix');setTimeout(()=>{const el=$q('#mxShift');if(el){el.value=b.dataset.shift;el.dispatchEvent(new Event('change'))}},0)});
-    const run=()=>{const q=$q('#dashBrainQuestion').value.trim();if(!q)return;try{const r=RPBrainEnterprise.answer(q);$q('#dashBrainAnswer').innerHTML=r.html;RPBrainEnterprise.bind($q('#dashBrainAnswer'))}catch(err){$q('#dashBrainAnswer').textContent='Eagle AI could not complete this request.'}};
+    const run=()=>{const q=$q('#dashBrainQuestion').value.trim();if(!q)return;try{const r=RPBrainEnterprise.answer(q);$q('#dashBrainAnswer').innerHTML=r.html;RPBrainEnterprise.bind($q('#dashBrainAnswer'))}catch(err){$q('#dashBrainAnswer').textContent='Eagle could not complete this request.'}};
     $q('#dashAskBrain').onclick=run;$q('#dashBrainQuestion').onkeydown=e=>{if(e.key==='Enter')run()};$q('#openFullBrain').onclick=()=>openEaglePanel();
   };
 
@@ -252,12 +252,12 @@
   function currentContext(){const title=$q('#main .page-head h1')?.textContent||'Dashboard';return title}
   window.openEaglePanel=function(){
     let panel=$q('#eagleAssistantPanel');if(!panel){panel=document.createElement('aside');panel.id='eagleAssistantPanel';panel.className='eagle-assistant-panel';document.body.appendChild(panel)}
-    panel.innerHTML=`<div class="eagle-panel-head"><div><img src="rpia-eagle-192.png" alt="Eagle AI"><span><b>Ask Eagle AI</b><small>Context: ${escV(currentContext())}</small></span></div><button id="closeEaglePanel" class="icon-btn">✕</button></div><div id="eagleMessages" class="eagle-messages">${eagleConversation.map(m=>`<div class="eagle-msg ${m.role}">${m.html}</div>`).join('')||'<div class="eagle-msg assistant">How can I help you with this screen?</div>'}</div><div class="eagle-compose"><input id="eagleQuestion" placeholder="Ask anything about your operation..."><button class="primary" id="sendEagleQuestion">Ask</button></div>`;
-    panel.classList.add('open');window.closeEaglePanel=()=>panel.classList.remove('open');$q('#closeEaglePanel').onclick=window.closeEaglePanel;try{RPBrainEnterprise.bind(panel)}catch(err){log('WARNING','Navigation Service','Could not bind Eagle AI result actions',err.message)};
-    const send=()=>{const input=$q('#eagleQuestion'),q=input.value.trim();if(!q)return;eagleConversation.push({role:'user',html:escV(q)});let html;try{const r=RPBrainEnterprise.answer(q);html=r.html;const why=ReasoningEngine.explain(q,r);html+=`<details class="reasoning-summary"><summary>Why this answer?</summary><p>${escV(why.summary)}</p></details>`;log('INFO','Eagle AI',`Question answered in ${currentContext()}`,why.summary)}catch(err){html=`Eagle AI could not complete this request. ${escV(err.message||'')}`;log('ERROR','Eagle AI','Floating assistant failed',err.message)}eagleConversation.push({role:'assistant',html});openEaglePanel();setTimeout(()=>{$q('#eagleMessages').scrollTop=$q('#eagleMessages').scrollHeight},0)};
+    panel.innerHTML=`<div class="eagle-panel-head"><div><img src="rpia-eagle-192.png" alt="Eagle"><span><b>Ask Eagle</b><small>Context: ${escV(currentContext())}</small></span></div><button id="closeEaglePanel" class="icon-btn">✕</button></div><div id="eagleMessages" class="eagle-messages">${eagleConversation.map(m=>`<div class="eagle-msg ${m.role}">${m.html}</div>`).join('')||'<div class="eagle-msg assistant">How can I help you with this screen?</div>'}</div><div class="eagle-compose"><input id="eagleQuestion" placeholder="Ask anything about your operation..."><button class="primary" id="sendEagleQuestion">Ask</button></div>`;
+    panel.classList.add('open');window.closeEaglePanel=()=>panel.classList.remove('open');$q('#closeEaglePanel').onclick=window.closeEaglePanel;try{RPBrainEnterprise.bind(panel)}catch(err){log('WARNING','Navigation Service','Could not bind Eagle result actions',err.message)};
+    const send=()=>{const input=$q('#eagleQuestion'),q=input.value.trim();if(!q)return;eagleConversation.push({role:'user',html:escV(q)});let html;try{const r=RPBrainEnterprise.answer(q);html=r.html;const why=ReasoningEngine.explain(q,r);html+=`<details class="reasoning-summary"><summary>Why this answer?</summary><p>${escV(why.summary)}</p></details>`;log('INFO','Eagle',`Question answered in ${currentContext()}`,why.summary)}catch(err){html=`Eagle could not complete this request. ${escV(err.message||'')}`;log('ERROR','Eagle','Floating assistant failed',err.message)}eagleConversation.push({role:'assistant',html});openEaglePanel();setTimeout(()=>{$q('#eagleMessages').scrollTop=$q('#eagleMessages').scrollHeight},0)};
     $q('#sendEagleQuestion').onclick=send;$q('#eagleQuestion').onkeydown=e=>{if(e.key==='Enter')send()};setTimeout(()=>$q('#eagleQuestion')?.focus(),50)
   };
-  function ensureFloatingEagle(){if(!$q('#app')||$q('#app').classList.contains('hidden'))return;let b=$q('#floatingEagleAI');if(!b){b=document.createElement('button');b.id='floatingEagleAI';b.className='floating-eagle-ai';b.innerHTML='<img src="rpia-eagle-192.png" alt=""><span>Ask Eagle AI</span>';b.onclick=openEaglePanel;document.body.appendChild(b)}}
+  function ensureFloatingEagle(){if(!$q('#app')||$q('#app').classList.contains('hidden'))return;let b=$q('#floatingEagleAI');if(!b){b=document.createElement('button');b.id='floatingEagleAI';b.className='floating-eagle-ai';b.innerHTML='<img src="rpia-eagle-192.png" alt=""><span>Ask Eagle</span>';b.onclick=openEaglePanel;document.body.appendChild(b)}}
   window.enterpriseToolsView=function(){
     if(currentUser?.role!=='admin'){navigate('dashboard');return}
     page('Enterprise','Server configuration, diagnostics, security, and recovery tools',`<div class="enterprise-module-grid"><button class="enterprise-module" id="enterpriseServer"><span>🖥️</span><b>Server Configuration</b><small>Local, test, production, API, files, and authentication.</small></button><button class="enterprise-module" id="enterpriseDiagnostics"><span>🛠️</span><b>Diagnostic Center</b><small>Engine health, tests, logs, and diagnostic reports.</small></button><button class="enterprise-module" id="enterpriseBackup"><span>💾</span><b>Backup & Restore</b><small>Create, verify, restore, and review local or enterprise backups.</small></button><button class="enterprise-module" id="enterpriseSecurity"><span>🔐</span><b>Security Center</b><small>Review roles and permission assurance issues.</small></button></div><div id="enterpriseSummary" class="card"><h3>Platform status</h3><p>${dataQualityIssues().length} data quality issue(s) · ${permissionIssues().length} permission issue(s).</p></div>`);
@@ -269,12 +269,12 @@
   window.metlIntelligence=function(){
     const people=(state.personnel||[]).filter(p=>p.employeeNumber&&p.name&&p.status==='Active');
     const avg=people.length?Math.round(people.reduce((n,p)=>n+personMetrics(p).pct,0)/people.length):0;
-    page('Ask Eagle AI','One conversation interface coordinated by all RP IA engines',`
+    page('Ask Eagle','One conversation interface coordinated by all RP engines',`
       <div class="conversation-shell">
-        <aside class="conversation-context card"><span class="ai-badge">Powered by RP IA</span><h2>Eagle AI</h2><p>Ask about employees, advancement, readiness, qualifications, actions, tasks, or approved work knowledge.</p><div class="context-stat"><b>${avg}%</b><span>Department readiness</span></div><button class="secondary" id="brainBackDashboard">Return to Dashboard</button></aside>
-        <section class="card conversation-main"><div id="brainConversation" class="brain-conversation"><div class="brain-message assistant"><b>Eagle AI</b><p>How can I help? I will coordinate the appropriate engines and explain the basis of the answer.</p></div></div><div class="quick-prompts"><button>Who is closest to advancement?</button><button>Show overdue corrective actions</button><button>Who can perform Die Move independently?</button><button>Open the approved Die Move procedure</button></div><div class="ask-row"><input id="fullBrainQuestion" placeholder="Example: What does John Smith need to advance?"><button class="primary" id="fullBrainAsk">Ask</button></div></section>
+        <aside class="conversation-context card"><span class="ai-badge">Powered by RP</span><h2>Eagle</h2><p>Ask about employees, advancement, readiness, qualifications, actions, tasks, or approved work knowledge.</p><div class="context-stat"><b>${avg}%</b><span>Department readiness</span></div><button class="secondary" id="brainBackDashboard">Return to Dashboard</button></aside>
+        <section class="card conversation-main"><div id="brainConversation" class="brain-conversation"><div class="brain-message assistant"><b>Eagle</b><p>How can I help? I will coordinate the appropriate engines and explain the basis of the answer.</p></div></div><div class="quick-prompts"><button>Who is closest to advancement?</button><button>Show overdue corrective actions</button><button>Who can perform Die Move independently?</button><button>Open the approved Die Move procedure</button></div><div class="ask-row"><input id="fullBrainQuestion" placeholder="Example: What does John Smith need to advance?"><button class="primary" id="fullBrainAsk">Ask</button></div></section>
       </div>`);
-    const run=()=>{const input=$q('#fullBrainQuestion'),q=input.value.trim();if(!q)return;const box=$q('#brainConversation');box.insertAdjacentHTML('beforeend',`<div class="brain-message user"><b>You</b><p>${escV(q)}</p></div>`);input.value='';try{const r=RPBrainEnterprise.answer(q);const why=ReasoningEngine.explain(q,r);box.insertAdjacentHTML('beforeend',`<div class="brain-message assistant"><b>Eagle AI</b><div class="brain-response">${r.html}</div><details class="reasoning-summary"><summary>Why this answer?</summary><p>${escV(why.summary)}</p><p><b>Sources:</b> ${why.sources.map(escV).join(' · ')}</p></details></div>`);RPBrainEnterprise.bind(box);log('INFO','Reasoning Engine',`Reasoning trace created for: ${q}`,why.summary)}catch(err){box.insertAdjacentHTML('beforeend',`<div class="brain-message assistant error"><b>Eagle AI</b><p>I could not complete that request. The error was sent to Diagnostic Center.</p></div>`);log('ERROR','Eagle AI','Conversation request failed',err.message||String(err))}box.scrollTop=box.scrollHeight};
+    const run=()=>{const input=$q('#fullBrainQuestion'),q=input.value.trim();if(!q)return;const box=$q('#brainConversation');box.insertAdjacentHTML('beforeend',`<div class="brain-message user"><b>You</b><p>${escV(q)}</p></div>`);input.value='';try{const r=RPBrainEnterprise.answer(q);const why=ReasoningEngine.explain(q,r);box.insertAdjacentHTML('beforeend',`<div class="brain-message assistant"><b>Eagle</b><div class="brain-response">${r.html}</div><details class="reasoning-summary"><summary>Why this answer?</summary><p>${escV(why.summary)}</p><p><b>Sources:</b> ${why.sources.map(escV).join(' · ')}</p></details></div>`);RPBrainEnterprise.bind(box);log('INFO','Reasoning Engine',`Reasoning trace created for: ${q}`,why.summary)}catch(err){box.insertAdjacentHTML('beforeend',`<div class="brain-message assistant error"><b>Eagle</b><p>I could not complete that request. The error was sent to Diagnostic Center.</p></div>`);log('ERROR','Eagle','Conversation request failed',err.message||String(err))}box.scrollTop=box.scrollHeight};
     $q('#fullBrainAsk').onclick=run;$q('#fullBrainQuestion').onkeydown=e=>{if(e.key==='Enter')run()};$$q('.quick-prompts button').forEach(b=>b.onclick=()=>{$q('#fullBrainQuestion').value=b.textContent;run()});$q('#brainBackDashboard').onclick=()=>navigate('dashboard');
   };
 
@@ -295,16 +295,16 @@
   ];
   window.renderNav=function(){
     const allowed=window.navDefs.filter(x=>{if(['settings','enterprise'].includes(x[0]))return currentUser.role==='admin';if(x[0]==='audit')return currentUser.role==='admin'||currentUser.role==='evaluator';return true});
-    $q('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP IA</strong>${uiLanguage==='es'?'Impulsado por RP IA':'Powered by RP IA'}</div>`;
+    $q('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}</div>`;
     $$q('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view));
   };
   window.navigate=function(v){
     view=v;trackInterest(v,1);$$q('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));$q('#nav').classList.remove('open');$q('#navScrim').classList.remove('open');
     const routes={dashboard,personnel,tasks,matrix:matrixView,assessments:assessmentsUnifiedView,actions,knowledge:knowledgeCenterView,notifications:notificationView,audit:auditView,profile:myProfile,settings,enterprise:enterpriseToolsView,backup:backupRestoreView,intelligence:metlIntelligence};
-    try{(routes[v]||dashboard)()}catch(err){console.error('RP IA view error',v,err);log('ERROR','Navigation',`Unable to open ${v}`,err.message||String(err));page('Unable to open this view','The rest of RP IA is still available.',`<div class="card"><h3>View error</h3><p>${escV(err?.message||'Unknown error')}</p><button class="primary" id="returnDashboard">Return to dashboard</button></div>`);$q('#returnDashboard').onclick=()=>navigate('dashboard')}
+    try{(routes[v]||dashboard)()}catch(err){console.error('RP view error',v,err);log('ERROR','Navigation',`Unable to open ${v}`,err.message||String(err));page('Unable to open this view','The rest of RP is still available.',`<div class="card"><h3>View error</h3><p>${escV(err?.message||'Unknown error')}</p><button class="primary" id="returnDashboard">Return to dashboard</button></div>`);$q('#returnDashboard').onclick=()=>navigate('dashboard')}
   };
 
   /* Server icon now opens Enterprise tools, where Diagnostic Center lives. */
   const serverBtn=$q('#serverConfigBtn');if(serverBtn)serverBtn.onclick=()=>navigate('enterprise');
-  log('INFO','Platform',`RP IA Enterprise Platform ${VERSION} loaded`,'20 engines registered; Eagle AI and enterprise layers initialized.');setInterval(ensureFloatingEagle,700);
+  log('INFO','Platform',`RP Enterprise Platform ${VERSION} loaded`,'20 engines registered; Eagle and enterprise layers initialized.');setInterval(ensureFloatingEagle,700);
 })();

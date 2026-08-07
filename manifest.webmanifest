@@ -1,11 +1,11 @@
 {
-  "name": "RP IA Enterprise \u2014 Eagle AI Platform",
-  "short_name": "RP IA",
+  "name": "RP Enterprise \u2014 Eagle Platform",
+  "short_name": "RP",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#071426",
   "theme_color": "#071426",
-  "description": "Enterprise competency, training, and operational intelligence platform powered by Eagle AI",
+  "description": "Enterprise competency, training, and operational intelligence platform powered by Eagle",
   "icons": [
     {
       "src": "rpia-eagle-192.png",
