@@ -264,20 +264,17 @@ function assess(){
       <label>Department
         <select id="aDepartment">${departmentOptions(initialDept)}</select>
       </label>
-
       <label class="full">Find associate
         <input id="aPersonSearch" type="search" inputmode="search" autocomplete="off"
+          autocorrect="off" spellcheck="false"
           placeholder="Search by associate name or employee #">
       </label>
-
       <label>Associate
         <select id="aPerson"><option value="">Select associate</option></select>
       </label>
-
       <label>METL task
         <select id="aTask"><option value="">Select task</option></select>
       </label>
-
       <label>Evaluation date<input id="aDate" type="date" value="${today()}"></label>
       <label>Method<select id="aMethod">${['Hands-On','Direct Observation','Oral Questioning','Written Test','Simulation','Document Review','Combined'].map(x=>`<option>${x}</option>`).join('')}</select></label>
       <label>Production line / location<input id="aLine"></label>
@@ -286,50 +283,82 @@ function assess(){
     <div id="evalSubs"></div>`
   );
 
-  const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  const norm=v=>String(v??'')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/\u00a0/g,' ')
+    .replace(/[^a-zA-Z0-9]+/g,' ')
+    .toLowerCase()
+    .replace(/\s+/g,' ')
+    .trim();
 
-  const refreshAssociateList=()=>{
+  const peopleForDept=()=>{
     const dept=$('#aDepartment').value;
+    return activePeople()
+      .filter(p=>!dept||String(p.departmentId||defaultDepartmentId())===String(dept))
+      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+  };
+
+  const refreshAssociateList=(autoSelect=true)=>{
     const q=norm($('#aPersonSearch').value);
+    const tokens=q?q.split(' ').filter(Boolean):[];
     const current=$('#aPerson').value;
 
-    const people=activePeople()
-      .filter(p=>!dept||String(p.departmentId)===String(dept))
-      .filter(p=>{
-        if(!q)return true;
-        return norm(`${p.name} ${p.employeeNumber}`).includes(q);
-      })
-      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+    const people=peopleForDept().filter(p=>{
+      if(!tokens.length)return true;
+      const hay=norm([p.name,p.employeeNumber,p.shift,p.role].filter(Boolean).join(' '));
+      return tokens.every(t=>hay.includes(t));
+    });
 
     $('#aPerson').innerHTML=
       `<option value="">Select associate</option>`+
       people.map(p=>`<option value="${esc(p.employeeNumber)}">${esc(p.name)} · #${esc(p.employeeNumber)} · ${esc(p.shift)} · ${esc(p.assignedLevel)}</option>`).join('');
 
-    if(people.some(p=>String(p.employeeNumber)===String(current)))$('#aPerson').value=current;
+    if(people.some(p=>String(p.employeeNumber)===String(current))){
+      $('#aPerson').value=current;
+    }else if(autoSelect && tokens.length && people.length===1){
+      $('#aPerson').value=String(people[0].employeeNumber);
+    }else{
+      $('#aPerson').value='';
+    }
+
+    if($('#aPerson').value) drawAssessment();
+    else $('#evalSubs').innerHTML='';
   };
 
   const refreshTaskList=()=>{
     const dept=$('#aDepartment').value;
     const current=$('#aTask').value;
-    const rows=tasks.filter(t=>!dept||String(t.departmentId||defaultDepartmentId())===String(dept));
+    const rows=tasks
+      .filter(t=>!dept||String(t.departmentId||defaultDepartmentId())===String(dept))
+      .sort((a,b)=>String(a.id||'').localeCompare(String(b.id||'')));
+
     $('#aTask').innerHTML=
       `<option value="">Select task</option>`+
       rows.map(t=>`<option value="${esc(t.id)}">${esc(t.id)} — ${esc(t.name)} (${esc(t.requiredLevel)})</option>`).join('');
-    if(rows.some(t=>String(t.id)===String(current)))$('#aTask').value=current;
+
+    if(rows.some(t=>String(t.id)===String(current))) $('#aTask').value=current;
+    else $('#aTask').value='';
   };
 
   $('#aDepartment').onchange=()=>{
     $('#aPersonSearch').value='';
-    refreshAssociateList();
+    refreshAssociateList(false);
     refreshTaskList();
     $('#evalSubs').innerHTML='';
   };
-  $('#aPersonSearch').oninput=refreshAssociateList;
-  $('#aPersonSearch').onsearch=refreshAssociateList;
-  $('#aPerson').onchange=drawAssessment;
+
+  $('#aPersonSearch').oninput=()=>refreshAssociateList(true);
+  $('#aPersonSearch').onsearch=()=>refreshAssociateList(true);
+
+  $('#aPerson').onchange=()=>{
+    drawAssessment();
+  };
+
   $('#aTask').onchange=drawAssessment;
 
-  refreshAssociateList();
+  // Full list is available immediately for manual scrolling.
+  refreshAssociateList(false);
   refreshTaskList();
 }
 function drawAssessment(){const emp=$('#aPerson').value,tid=$('#aTask').value;if(!emp||!tid)return $('#evalSubs').innerHTML='';const p=state.personnel.find(x=>x.employeeNumber===emp),t=state.tasks.find(x=>x.id===tid);if(levelRank[t.requiredLevel]>levelRank[currentUser.maxLevel||'-40'])return $('#evalSubs').innerHTML='<div class="card bad">Evaluator is not authorized for this qualification level.</div>';const subs=state.subtasks.filter(s=>s.taskId===tid&&s.status==='Active'&&levelRank[s.requiredLevel]<=levelRank[p.assignedLevel]);$('#evalSubs').innerHTML=`<h3>${subs.length} applicable subtasks</h3>${subs.map(s=>`<div class="subtask-eval ${s.criticality==='Critical Gate'?'critical-box':''}" data-sub="${s.id}"><div class="page-head"><div><h4>${s.id}</h4><p>${esc(s.name)}</p></div>${s.criticality==='Critical Gate'?'<span class="pill critical">Critical Gate</span>':''}</div><p><b>Standard:</b> ${esc(s.standard)}</p><p><b>Required evidence:</b> ${esc(s.evidence)}</p><div class="form-grid"><label>Rating<select class="r"><option>NOT EVALUATED</option><option>GO</option><option>NO-GO</option><option>REQUIRES ASSISTANCE</option><option>SUSPENDED</option></select></label><label>Evidence reference<input class="ev" placeholder="Photo, document, test, observation"></label><label class="full">Evaluator observations<textarea class="obs"></textarea></label>${s.srLeadVerification?'<label>Sr. Lead verification<select class="verify"><option value="">Pending</option><option>Verified</option><option>Not Verified</option></select></label>':''}</div></div>`).join('')}<div class="card form-grid"><label>Retraining required<select id="aRetrain"><option>No</option><option>Yes</option></select></label><label>Reassessment date<input id="aReDate" type="date"></label><label class="full">Corrective action summary<textarea id="aCorrective"></textarea></label></div><button class="primary" id="submitAssessment">Sign and submit assessment</button>`;$('#submitAssessment').onclick=submitAssessment}
@@ -867,7 +896,7 @@ function settings(){
 function restoreBackup(e){const f=e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const obj=JSON.parse(reader.result);state=normalize(obj);audit('RESTORE','System','backup','JSON backup restored');toast('Backup restored');dashboard()}catch{toast('Invalid backup file')}};reader.readAsText(f)}
 function modal(html){document.body.insertAdjacentHTML('beforeend',`<div class="modal"><div class="modal-card">${html}</div></div>`);$$('.close').forEach(b=>b.onclick=closeModal)} function closeModal(){$('.modal')?.remove()}
 $('#langEn').onclick=()=>applyLanguage('en');$('#langEs').onclick=()=>applyLanguage('es');if($('#languageMenuBtn'))$('#languageMenuBtn').onclick=()=>{const menu=$('#languageMenu');const opening=menu.classList.contains('hidden');menu.classList.toggle('hidden');$('#languageMenuBtn').setAttribute('aria-expanded',opening?'true':'false')};document.addEventListener('click',e=>{const wrap=e.target.closest?.('.login-language');if(!wrap){$('#languageMenu')?.classList.add('hidden');$('#languageMenuBtn')?.setAttribute('aria-expanded','false')}});applyLanguage(uiLanguage,false);$('#loginBtn').onclick=login;$('#pin').onkeydown=e=>{if(e.key==='Enter')login()};$('#changePasswordBtn').onclick=changePassword;$('#profileBtn').onclick=()=>navigate('profile');$('#serverConfigBtn').onclick=()=>window.RpiaServerSetup.open();$('#logoutBtn').onclick=logout;$('#menuBtn').onclick=()=>{$('#nav').classList.toggle('open');$('#navScrim').classList.toggle('open')};$('#navScrim').onclick=()=>{$('#nav').classList.remove('open');$('#navScrim').classList.remove('open')};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=9.9.0').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=9.9.1').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});
 
 /* RP v6.1 — core compliance implementation overrides */
 function matrixView(){
