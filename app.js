@@ -16,11 +16,65 @@ function loadUsers(){try{const u=JSON.parse(localStorage.getItem(AUTH_KEY));cons
 let authUsers=loadUsers(); function saveUsers(){localStorage.setItem(AUTH_KEY,JSON.stringify(authUsers))}
 function employeePhoto(p,cls='employee-photo'){return p?.photo?`<img class="${cls}" src="${p.photo}" alt="${esc(p.name||'Employee')} photo">`:`<div class="${cls} photo-placeholder">${esc((p?.name||'?').trim().charAt(0).toUpperCase()||'?')}</div>`}
 function readEmployeePhoto(file,done){if(!file)return done('');if(!file.type.startsWith('image/'))return toast('Choose an image file');if(file.size>12*1024*1024)return toast('Photo is too large');const r=new FileReader();r.onload=()=>{const img=new Image();img.onload=()=>{const max=480,scale=Math.min(1,max/Math.max(img.width,img.height)),w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale)),c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);done(c.toDataURL('image/jpeg',.78))};img.onerror=()=>toast('Unable to read photo');img.src=r.result};r.readAsDataURL(file)}
-function normalize(s){const b=clone(window.METL_BASELINE);for(const k of Object.keys(b))if(s[k]===undefined)s[k]=b[k];for(const k of ['personnel','evaluators','tasks','subtasks','sessions','results','actions','audit','sources','personnelMatrix','notifications'])if(!Array.isArray(s[k]))s[k]=[];s.settings={...b.settings,...(s.settings||{})};return s}
+function normalize(s){
+  const b=clone(window.METL_BASELINE);
+  for(const k of Object.keys(b))if(s[k]===undefined)s[k]=b[k];
+  for(const k of ['personnel','evaluators','tasks','subtasks','sessions','results','actions','audit','sources','personnelMatrix','notifications'])if(!Array.isArray(s[k]))s[k]=[];
+
+  s.settings={...b.settings,...(s.settings||{})};
+
+  // v9.9 multi-department foundation.
+  if(!Array.isArray(s.departments))s.departments=[];
+  if(!s.departments.length){
+    s.departments.push({
+      id:'DEPT-EXTRUSION',
+      name:'Extrusion',
+      code:'EXTRUSION',
+      status:'Active',
+      createdAt:new Date().toISOString(),
+      systemDefault:true
+    });
+  }
+  const extrusion=s.departments.find(d=>String(d.name||'').toLowerCase()==='extrusion')||s.departments[0];
+  if(extrusion){
+    extrusion.id=extrusion.id||'DEPT-EXTRUSION';
+    extrusion.code=extrusion.code||'EXTRUSION';
+    extrusion.status=extrusion.status||'Active';
+  }
+  const defaultDeptId=s.settings.defaultDepartmentId||extrusion?.id||'DEPT-EXTRUSION';
+  s.settings.defaultDepartmentId=defaultDeptId;
+
+  // Existing records are migrated to Extrusion without deleting/rebuilding anything.
+  for(const p of s.personnel)if(p&&!p.departmentId)p.departmentId=defaultDeptId;
+  for(const t of s.tasks)if(t&&!t.departmentId)t.departmentId=defaultDeptId;
+  for(const st of s.subtasks)if(st&&!st.departmentId)st.departmentId=(s.tasks.find(t=>t.id===st.taskId&&t.status!=='Superseded')?.departmentId||defaultDeptId);
+  for(const a of s.sessions)if(a&&!a.departmentId)a.departmentId=(s.personnel.find(p=>String(p.employeeNumber)===String(a.employeeNumber))?.departmentId||defaultDeptId);
+  for(const r of s.results)if(r&&!r.departmentId)r.departmentId=(s.personnel.find(p=>String(p.employeeNumber)===String(r.employeeNumber))?.departmentId||defaultDeptId);
+  for(const ca of s.actions)if(ca&&!ca.departmentId)ca.departmentId=(s.personnel.find(p=>String(p.employeeNumber)===String(ca.employeeNumber))?.departmentId||defaultDeptId);
+
+  return s
+}
 function loadState(){try{const saved=JSON.parse(localStorage.getItem(DATA_KEY));return normalize(saved||clone(window.METL_BASELINE))}catch{return normalize(clone(window.METL_BASELINE))}}
 state=loadState();
 let rpConversation={lastIntent:'',shift:'',level:'',employeeNumber:'',taskId:'',lastAnswer:'',history:[]};
 function save(){localStorage.setItem(DATA_KEY,JSON.stringify(state))}
+function activeDepartments(){
+  return (state.departments||[]).filter(d=>d&&d.status!=='Inactive');
+}
+function departmentById(id){
+  return (state.departments||[]).find(d=>String(d.id)===String(id))||null;
+}
+function departmentName(id){
+  return departmentById(id)?.name||'Extrusion';
+}
+function defaultDepartmentId(){
+  return state.settings?.defaultDepartmentId||activeDepartments()[0]?.id||'DEPT-EXTRUSION';
+}
+function departmentOptions(selected='',includeAll=false){
+  const prefix=includeAll?'<option value="">All departments</option>':'';
+  return prefix+activeDepartments().map(d=>`<option value="${esc(d.id)}" ${String(selected)===String(d.id)?'selected':''}>${esc(d.name)}</option>`).join('');
+}
+
 function toast(t){$('#toast').textContent=t;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),2200)}
 function audit(action,entity,id,detail,before=null,after=null){AuditEngine.record(state,currentUser,action,entity,id,detail,before,after);save()}
 function today(){return new Date().toISOString().slice(0,10)} function uid(p){return p+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,6)}
@@ -188,18 +242,96 @@ function openEmployeeProfile(identifier){
 }
 window.openEmployeeProfile=openEmployeeProfile;
 function personDetail(emp){const key=String(emp??'').trim();const p=state.personnel.find(x=>String(x.employeeNumber??'').trim()===key);if(!p){toast('Employee profile not found');return}const m=personMetrics(p),hist=state.sessions.filter(s=>String(s.employeeNumber??'').trim()===key).sort((a,b)=>(b.date||'').localeCompare(a.date||''));page(esc(p.name),`${p.shift} Shift · ${p.role} · Employee #${p.employeeNumber}`,`<div class="person-profile">${employeePhoto(p,'employee-photo-large')}<div><h2>${esc(p.name)}</h2><p>${p.shift} Shift · ${esc(p.role)} · Employee #${esc(p.employeeNumber)}</p></div></div><div class="kpis"><div class="kpi"><b>${p.assignedLevel}</b><span>Assigned level</span></div><div class="kpi"><b>${m.highest}</b><span>Highest fully qualified</span></div><div class="kpi"><b>${m.pct}%</b><span>Readiness</span></div><div class="kpi warn"><b>${m.open}</b><span>Open actions</span></div></div><div class="grid"><div class="card"><h3>Authorization status</h3><p><b>Independent performance:</b> ${m.critical||m.open?'Restricted pending closure':'Based on current GO records'}</p><p><b>Qualified lines:</b> ${esc(p.qualifiedLines||'Not assigned')}</p><p><b>Hire date:</b> ${esc(p.hireDate||'Not entered')}</p><p><b>Extrusion assignment:</b> ${esc(p.extrusionDate||p.effectiveDate||'Not entered')}</p><p><b>Supervisor / Sr. Lead:</b> ${esc(p.supervisor||'Not entered')}</p></div><div class="card"><h3>Assessment summary</h3><p>GO: ${m.go} · NO-GO: ${m.nogo} · Assistance: ${m.assist} · Critical: ${m.critical}</p><div class="progress"><span style="width:${m.pct}%"></span></div></div></div><h3>Assessment history</h3>${sessionTable(hist)}`,'<button class="secondary" id="backPeople">Back</button>');$('#backPeople').onclick=personnel}
-function personEdit(pos){const p=pos?state.personnel.find(x=>x.positionId===pos):{positionId:uid('POS'),status:'Active',assignedLevel:'-10',shift:'A',role:'Operator',photo:''};const old=clone(p);let pendingPhoto=p.photo||'';modal(`<h2>${pos?'Edit':'Add'} personnel master record</h2><div class="photo-editor"><div id="photoPreview">${employeePhoto(p,'employee-photo-large')}</div><div><label class="photo-upload">Employee photo<input id="mPhoto" type="file" accept="image/*" capture="environment"></label><button class="secondary" id="removePhoto" type="button">Remove photo</button><small>The image is compressed automatically and stored with this local profile.</small></div></div><div class="form-grid"><label>Employee number<input id="mEmp" value="${esc(p.employeeNumber)}"></label><label>Associate name<input id="mName" value="${esc(p.name)}"></label><label>Shift<select id="mShift">${['A','B','C','D'].map(x=>`<option ${p.shift===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Role<select id="mRole">${['Operator','Sr. Lead','Supervisor'].map(x=>`<option ${p.role===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Assigned level<select id="mLevel">${Object.keys(levelRank).map(x=>`<option ${p.assignedLevel===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Employment status<select id="mStatus">${['Active','Leave of Absence','Inactive','Terminated'].map(x=>`<option ${p.status===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Preferred language<select id="mLang"><option value="en">English</option><option value="es">Español</option></select></label><label>Qualified lines<input id="mLines" value="${esc(p.qualifiedLines)}"></label><label>Hire date<input id="mHire" type="date" value="${esc(p.hireDate)}"></label><label>Extrusion assignment date<input id="mExt" type="date" value="${esc(p.extrusionDate||p.effectiveDate)}"></label><label>Supervisor / Sr. Lead<input id="mSup" value="${esc(p.supervisor)}"></label><label class="full">Notes<textarea id="mNotes">${esc(p.notes)}</textarea></label></div><div class="actions"><button class="primary" id="savePerson">Save master record</button><button class="secondary close">Cancel</button></div>`);$('#mPhoto').onchange=e=>readEmployeePhoto(e.target.files[0],data=>{pendingPhoto=data;$('#photoPreview').innerHTML=data?`<img class="employee-photo-large" src="${data}" alt="Employee photo preview">`:`<div class="employee-photo-large photo-placeholder">?</div>`});$('#removePhoto').onclick=()=>{pendingPhoto='';$('#photoPreview').innerHTML='<div class="employee-photo-large photo-placeholder">?</div>';$('#mPhoto').value=''};$('#savePerson').onclick=()=>{const emp=$('#mEmp').value.trim(),name=$('#mName').value.trim();if(!emp||!name)return toast('Employee number and name are required');const dupe=state.personnel.find(x=>x.employeeNumber===emp&&x.positionId!==p.positionId);if(dupe)return toast('Employee number must be unique');const isNew=!pos;Object.assign(p,{employeeNumber:emp,name,shift:$('#mShift').value,role:$('#mRole').value,assignedLevel:$('#mLevel').value,status:$('#mStatus').value,qualifiedLines:$('#mLines').value,hireDate:$('#mHire').value,extrusionDate:$('#mExt').value,supervisor:$('#mSup').value,notes:$('#mNotes').value,photo:pendingPhoto});if(isNew)state.personnel.push(p);let u=ensureUserForPerson(p);Object.assign(u,{employeeNumber:emp,name,username:isNew?emp:u.username,maxLevel:p.assignedLevel,language:$('#mLang').value,disabled:p.status!=='Active'});if(isNew){u.role='viewer';u.password='RP'+emp;u.mustChange=true;u.manageMetl=false;u.managePersonnel=false}saveUsers();audit(isNew?'CREATE':'UPDATE','Personnel & User',p.employeeNumber,isNew?'Master record and login account created':'Master record revised',old,p);closeModal();if(isNew){const applicableSubs=state.subtasks.filter(x=>x.status==='Active'&&levelRank[x.requiredLevel]<=levelRank[p.assignedLevel]);const taskIds=new Set(applicableSubs.map(x=>x.taskId));modal(`<div class="success-panel"><div class="success-icon">✓</div><h2>Employee successfully created</h2><p>The personnel profile and read-only login account are ready.</p><div class="credential-card"><div><span>Name</span><b>${esc(p.name)}</b></div><div><span>Employee # / Username</span><b>${esc(emp)}</b></div><div><span>Temporary password</span><b>RP${esc(emp)}</b></div><div><span>Status</span><b>${esc(p.status)}</b></div><div><span>Assigned level</span><b>${esc(p.assignedLevel)}</b></div><div><span>METL tasks available</span><b>${taskIds.size}</b></div><div><span>Subtasks available</span><b>${applicableSubs.length}</b></div></div><p class="notice">The employee must change the temporary password at first login. Authority remains read-only until an administrator changes it manually.</p><div class="actions"><button class="primary" id="copyCredentials">Copy credentials</button><button class="secondary" id="finishNewEmployee">Done</button></div></div>`);$('#copyCredentials').onclick=async()=>{const text=`RP login\nName: ${p.name}\nUsername: ${emp}\nTemporary password: RP${emp}`;try{await navigator.clipboard.writeText(text);toast('Credentials copied')}catch{toast(`Username ${emp} · Password RP${emp}`)}};$('#finishNewEmployee').onclick=()=>{closeModal();personnel()}}else personnel()}}
+function personEdit(pos){const p=pos?state.personnel.find(x=>x.positionId===pos):{positionId:uid('POS'),status:'Active',assignedLevel:'-10',shift:'A',role:'Operator',photo:'',departmentId:defaultDepartmentId()};const old=clone(p);let pendingPhoto=p.photo||'';modal(`<h2>${pos?'Edit':'Add'} personnel master record</h2><div class="photo-editor"><div id="photoPreview">${employeePhoto(p,'employee-photo-large')}</div><div><label class="photo-upload">Employee photo<input id="mPhoto" type="file" accept="image/*" capture="environment"></label><button class="secondary" id="removePhoto" type="button">Remove photo</button><small>The image is compressed automatically and stored with this local profile.</small></div></div><div class="form-grid"><label>Department<select id="mDepartment">${departmentOptions(p.departmentId||defaultDepartmentId())}</select></label><label>Employee number<input id="mEmp" value="${esc(p.employeeNumber)}"></label><label>Associate name<input id="mName" value="${esc(p.name)}"></label><label>Shift<select id="mShift">${['A','B','C','D'].map(x=>`<option ${p.shift===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Role<select id="mRole">${['Operator','Sr. Lead','Supervisor'].map(x=>`<option ${p.role===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Assigned level<select id="mLevel">${Object.keys(levelRank).map(x=>`<option ${p.assignedLevel===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Employment status<select id="mStatus">${['Active','Leave of Absence','Inactive','Terminated'].map(x=>`<option ${p.status===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Preferred language<select id="mLang"><option value="en">English</option><option value="es">Español</option></select></label><label>Qualified lines<input id="mLines" value="${esc(p.qualifiedLines)}"></label><label>Hire date<input id="mHire" type="date" value="${esc(p.hireDate)}"></label><label>Extrusion assignment date<input id="mExt" type="date" value="${esc(p.extrusionDate||p.effectiveDate)}"></label><label>Supervisor / Sr. Lead<input id="mSup" value="${esc(p.supervisor)}"></label><label class="full">Notes<textarea id="mNotes">${esc(p.notes)}</textarea></label></div><div class="actions"><button class="primary" id="savePerson">Save master record</button><button class="secondary close">Cancel</button></div>`);$('#mPhoto').onchange=e=>readEmployeePhoto(e.target.files[0],data=>{pendingPhoto=data;$('#photoPreview').innerHTML=data?`<img class="employee-photo-large" src="${data}" alt="Employee photo preview">`:`<div class="employee-photo-large photo-placeholder">?</div>`});$('#removePhoto').onclick=()=>{pendingPhoto='';$('#photoPreview').innerHTML='<div class="employee-photo-large photo-placeholder">?</div>';$('#mPhoto').value=''};$('#savePerson').onclick=()=>{const emp=$('#mEmp').value.trim(),name=$('#mName').value.trim();if(!emp||!name)return toast('Employee number and name are required');const dupe=state.personnel.find(x=>x.employeeNumber===emp&&x.positionId!==p.positionId);if(dupe)return toast('Employee number must be unique');const isNew=!pos;Object.assign(p,{departmentId:$('#mDepartment').value||defaultDepartmentId(),employeeNumber:emp,name,shift:$('#mShift').value,role:$('#mRole').value,assignedLevel:$('#mLevel').value,status:$('#mStatus').value,qualifiedLines:$('#mLines').value,hireDate:$('#mHire').value,extrusionDate:$('#mExt').value,supervisor:$('#mSup').value,notes:$('#mNotes').value,photo:pendingPhoto});if(isNew)state.personnel.push(p);let u=ensureUserForPerson(p);Object.assign(u,{employeeNumber:emp,name,username:isNew?emp:u.username,maxLevel:p.assignedLevel,language:$('#mLang').value,disabled:p.status!=='Active'});if(isNew){u.role='viewer';u.password='RP'+emp;u.mustChange=true;u.manageMetl=false;u.managePersonnel=false}saveUsers();audit(isNew?'CREATE':'UPDATE','Personnel & User',p.employeeNumber,isNew?'Master record and login account created':'Master record revised',old,p);closeModal();if(isNew){const applicableSubs=state.subtasks.filter(x=>x.status==='Active'&&levelRank[x.requiredLevel]<=levelRank[p.assignedLevel]);const taskIds=new Set(applicableSubs.map(x=>x.taskId));modal(`<div class="success-panel"><div class="success-icon">✓</div><h2>Employee successfully created</h2><p>The personnel profile and read-only login account are ready.</p><div class="credential-card"><div><span>Name</span><b>${esc(p.name)}</b></div><div><span>Employee # / Username</span><b>${esc(emp)}</b></div><div><span>Temporary password</span><b>RP${esc(emp)}</b></div><div><span>Status</span><b>${esc(p.status)}</b></div><div><span>Assigned level</span><b>${esc(p.assignedLevel)}</b></div><div><span>METL tasks available</span><b>${taskIds.size}</b></div><div><span>Subtasks available</span><b>${applicableSubs.length}</b></div></div><p class="notice">The employee must change the temporary password at first login. Authority remains read-only until an administrator changes it manually.</p><div class="actions"><button class="primary" id="copyCredentials">Copy credentials</button><button class="secondary" id="finishNewEmployee">Done</button></div></div>`);$('#copyCredentials').onclick=async()=>{const text=`RP login\nName: ${p.name}\nUsername: ${emp}\nTemporary password: RP${emp}`;try{await navigator.clipboard.writeText(text);toast('Credentials copied')}catch{toast(`Username ${emp} · Password RP${emp}`)}};$('#finishNewEmployee').onclick=()=>{closeModal();personnel()}}else personnel()}}
 function tasks(){page('METL & Subtask Library',`${state.tasks.filter(t=>t.status==='Active').length} active METL tasks · ${state.subtasks.filter(s=>s.status==='Active').length} active supporting subtasks`,`<div class="library-tabs"><button class="tab active" id="taskTab">METL Tasks</button><button class="tab" id="subTab">Subtask Library</button></div><div id="libraryBody"></div>`,canManageMetl()?'<button class="primary" id="newTask">New METL task</button><button class="primary" id="newSubtask">New subtask</button>':'');
 const drawTasks=()=>{$('#libraryBody').innerHTML=`<div class="filters"><input id="tSearch" placeholder="Search task, standard, or source"><select id="tLevel"><option value="">All levels</option>${Object.keys(levelRank).map(x=>`<option>${x}</option>`).join('')}</select><select id="tStatus"><option value="Active">Active</option><option value="">All</option><option>Inactive</option><option>Superseded</option></select></div><div id="taskList" class="grid"></div>`;const draw=()=>{const q=$('#tSearch').value.toLowerCase(),lv=$('#tLevel').value,st=$('#tStatus').value;$('#taskList').innerHTML=state.tasks.filter(t=>(t.id+' '+t.name+' '+t.description+' '+t.source).toLowerCase().includes(q)&&(!lv||t.requiredLevel===lv)&&(!st||t.status===st)).map(t=>{const subs=state.subtasks.filter(s=>s.taskId===t.id&&s.status==='Active'),cg=subs.filter(s=>s.criticality==='Critical Gate').length;return`<div class="card"><div class="page-head"><div><h3>${t.id} — ${esc(t.name)}</h3><p>${esc(t.domain)} · ${t.requiredLevel} · Revision ${t.revision||1}</p></div><span class="pill ${String(t.status).toLowerCase()}">${t.status}</span></div><p>${esc(t.description)}</p><small>${subs.length} subtasks · ${cg} Critical Gates · recert ${t.recertMonths||'—'} months</small><div class="actions"><button class="secondary tv" data-id="${t.id}">Open</button>${canManageMetl()?`<button class="secondary te" data-id="${t.id}">Edit</button>`:''}</div></div>`}).join('')||'<div class="card empty-state"><b>No METL tasks found</b></div>';$$('.tv').forEach(b=>b.onclick=()=>taskDetail(b.dataset.id));$$('.te').forEach(b=>b.onclick=()=>taskEdit(b.dataset.id))};['tSearch','tLevel','tStatus'].forEach(id=>$(`#${id}`).oninput=draw);draw()};
 const drawSubs=()=>{$('#libraryBody').innerHTML=`<div class="filters"><input id="sSearchAll" placeholder="Search ID, name, standard, evidence, or task"><select id="sTaskAll"><option value="">All METL tasks</option>${state.tasks.filter(t=>t.status==='Active').map(t=>`<option value="${t.id}">${t.id} — ${esc(t.name)}</option>`).join('')}</select><select id="sLevelAll"><option value="">All levels</option>${Object.keys(levelRank).map(x=>`<option>${x}</option>`).join('')}</select><select id="sCritAll"><option value="">All classifications</option><option>Supporting</option><option>Critical Gate</option></select></div><div id="subList" class="subtask-library"></div>`;const draw=()=>{const q=$('#sSearchAll').value.toLowerCase(),tid=$('#sTaskAll').value,lv=$('#sLevelAll').value,cr=$('#sCritAll').value;const rows=state.subtasks.filter(x=>x.status!=='Superseded'&&(!tid||x.taskId===tid)&&(!lv||x.requiredLevel===lv)&&(!cr||x.criticality===cr)&&(x.id+' '+x.name+' '+x.standard+' '+x.evidence+' '+x.taskId).toLowerCase().includes(q));$('#subList').innerHTML=rows.map(x=>`<article class="card subtask-card ${x.criticality==='Critical Gate'?'critical-box':''}"><div class="page-head"><div><b>${esc(x.id)}</b><h3>${esc(x.name)}</h3><small>${esc(x.taskId)} · ${esc(x.requiredLevel)} · ${esc(x.status||'Active')}</small></div><span class="pill ${x.criticality==='Critical Gate'?'critical':'ne'}">${esc(x.criticality||'Supporting')}</span></div><p><b>Standard:</b> ${esc(x.standard||'Not entered')}</p><p><b>Evidence:</b> ${esc(x.evidence||'Not entered')}</p>${canManageMetl()?`<div class="actions"><button class="secondary subEdit" data-task="${x.taskId}" data-id="${x.id}">Edit</button><button class="secondary subClone" data-task="${x.taskId}" data-id="${x.id}">Clone</button><button class="secondary subToggle" data-id="${x.id}">${x.status==='Inactive'?'Activate':'Deactivate'}</button></div>`:''}</article>`).join('')||'<div class="card empty-state"><b>No subtasks found</b><p>Try another filter or add a new subtask.</p></div>';$$('.subEdit').forEach(b=>b.onclick=()=>subtaskEdit(b.dataset.task,b.dataset.id));$$('.subClone').forEach(b=>b.onclick=()=>subtaskEdit(b.dataset.task,b.dataset.id,true));$$('.subToggle').forEach(b=>b.onclick=()=>{const x=state.subtasks.find(s=>s.id===b.dataset.id);const old=clone(x);x.status=x.status==='Inactive'?'Active':'Inactive';audit('UPDATE','Subtask',x.id,`Status changed to ${x.status}`,old,x);draw()})};['sSearchAll','sTaskAll','sLevelAll','sCritAll'].forEach(id=>$(`#${id}`).oninput=draw);draw()};
 const activate=(which)=>{const task=which==='task';$('#taskTab').classList.toggle('active',task);$('#subTab').classList.toggle('active',!task);task?drawTasks():drawSubs()};$('#taskTab').onclick=()=>activate('task');$('#subTab').onclick=()=>activate('sub');activate('task');if($('#newTask'))$('#newTask').onclick=()=>taskEdit();if($('#newSubtask'))$('#newSubtask').onclick=()=>subtaskEdit()}
 function taskDetail(id){const t=state.tasks.find(x=>x.id===id&&x.status==='Active')||state.tasks.find(x=>x.id===id);const subs=state.subtasks.filter(s=>s.taskId===id&&s.status!=='Superseded').sort((a,b)=>(a.sequence||0)-(b.sequence||0));page(`${t.id} — ${esc(t.name)}`,`${esc(t.domain)} · ${t.requiredLevel} · Revision ${t.revision||1}`,`<div class="card"><p>${esc(t.description)}</p><p><b>Training standard:</b> ${esc(t.trainedStandard)}</p><p><b>Source:</b> ${esc(t.source)}</p></div><div class="section-head"><h3>Supporting subtasks</h3>${canManageMetl()?`<button class="primary" id="addSub">Add subtask</button>`:''}</div><div class="grid">${subs.map(s=>`<div class="card ${s.criticality==='Critical Gate'?'critical-box':''}"><div class="page-head"><div><b>${s.id}</b><p>${esc(s.name)}</p></div><span class="pill ${s.criticality==='Critical Gate'?'critical':'ne'}">${esc(s.criticality)}</span></div><p><b>Level:</b> ${s.requiredLevel} · <b>Evidence:</b> ${esc(s.evidence)}</p><p><b>Standard:</b> ${esc(s.standard)}</p>${canManageMetl()?`<div class="actions"><button class="secondary se" data-id="${s.id}">Edit</button><button class="secondary sc" data-id="${s.id}">Clone</button></div>`:''}</div>`).join('')}</div>`,'<button class="secondary" id="backTask">Back</button>');$('#backTask').onclick=tasks;if($('#addSub'))$('#addSub').onclick=()=>subtaskEdit(id);$$('.se').forEach(b=>b.onclick=()=>subtaskEdit(id,b.dataset.id));$$('.sc').forEach(b=>b.onclick=()=>subtaskEdit(id,b.dataset.id,true))}
 
-function taskEdit(id){const existing=id?state.tasks.find(t=>t.id===id&&t.status==='Active'):null,p=existing?clone(existing):{id:'',name:'',domain:'',requiredLevel:'-10',description:'',trainedStandard:'',recertMonths:12,source:'',status:'Active',revision:1};modal(`<h2>${existing?'Revise':'Create'} METL task</h2><div class="form-grid"><label>Task ID<input id="eId" value="${esc(p.id)}" ${existing?'readonly':''}></label><label>Name<input id="eName" value="${esc(p.name)}"></label><label>Domain<input id="eDomain" value="${esc(p.domain)}"></label><label>Required level<select id="eLevel">${Object.keys(levelRank).map(x=>`<option ${p.requiredLevel===x?'selected':''}>${x}</option>`).join('')}</select></label><label class="full">Description<textarea id="eDesc">${esc(p.description)}</textarea></label><label class="full">Performance / training standard<textarea id="eStd">${esc(p.trainedStandard)}</textarea></label><label>Recertification months<input id="eRecert" type="number" value="${p.recertMonths||12}"></label><label>Source / reference<input id="eSource" value="${esc(p.source)}"></label><label>Status<select id="eStatus">${['Active','Inactive'].map(x=>`<option ${p.status===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Effective date<input id="eDate" type="date" value="${today()}"></label><label class="full">Revision reason<textarea id="eReason"></textarea></label></div><div class="actions"><button class="primary" id="saveTask">Publish controlled record</button><button class="secondary close">Cancel</button></div>`);$('#saveTask').onclick=()=>{const tid=$('#eId').value.trim(),name=$('#eName').value.trim();if(!tid||!name)return toast('Task ID and name are required');if(!existing&&state.tasks.some(t=>t.id===tid&&t.status==='Active'))return toast('Active Task ID already exists');const data={...p,id:tid,name,domain:$('#eDomain').value,requiredLevel:$('#eLevel').value,description:$('#eDesc').value,trainedStandard:$('#eStd').value,recertMonths:+$('#eRecert').value,source:$('#eSource').value,status:$('#eStatus').value,effectiveDate:$('#eDate').value,revisionReason:$('#eReason').value};if(existing){existing.status='Superseded';data.revision=(existing.revision||1)+1;data.previousRevision=existing.revision||1;state.tasks.push(data);audit('REVISE','METL Task',tid,`Revision ${data.revision} published`,existing,data)}else{state.tasks.push(data);audit('CREATE','METL Task',tid,'Controlled task created',null,data)}closeModal();tasks()}}
+function taskEdit(id){const existing=id?state.tasks.find(t=>t.id===id&&t.status==='Active'):null,p=existing?clone(existing):{id:'',name:'',domain:'',requiredLevel:'-10',description:'',trainedStandard:'',recertMonths:12,source:'',status:'Active',revision:1,departmentId:defaultDepartmentId()};modal(`<h2>${existing?'Revise':'Create'} METL task</h2><div class="form-grid"><label>Department<select id="eDepartment">${departmentOptions(p.departmentId||defaultDepartmentId())}</select></label><label>Task ID<input id="eId" value="${esc(p.id)}" ${existing?'readonly':''}></label><label>Name<input id="eName" value="${esc(p.name)}"></label><label>Domain<input id="eDomain" value="${esc(p.domain)}"></label><label>Required level<select id="eLevel">${Object.keys(levelRank).map(x=>`<option ${p.requiredLevel===x?'selected':''}>${x}</option>`).join('')}</select></label><label class="full">Description<textarea id="eDesc">${esc(p.description)}</textarea></label><label class="full">Performance / training standard<textarea id="eStd">${esc(p.trainedStandard)}</textarea></label><label>Recertification months<input id="eRecert" type="number" value="${p.recertMonths||12}"></label><label>Source / reference<input id="eSource" value="${esc(p.source)}"></label><label>Status<select id="eStatus">${['Active','Inactive'].map(x=>`<option ${p.status===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Effective date<input id="eDate" type="date" value="${today()}"></label><label class="full">Revision reason<textarea id="eReason"></textarea></label></div><div class="actions"><button class="primary" id="saveTask">Publish controlled record</button><button class="secondary close">Cancel</button></div>`);$('#saveTask').onclick=()=>{const tid=$('#eId').value.trim(),name=$('#eName').value.trim();if(!tid||!name)return toast('Task ID and name are required');if(!existing&&state.tasks.some(t=>t.id===tid&&t.status==='Active'))return toast('Active Task ID already exists');const data={...p,departmentId:$('#eDepartment').value||defaultDepartmentId(),id:tid,name,domain:$('#eDomain').value,requiredLevel:$('#eLevel').value,description:$('#eDesc').value,trainedStandard:$('#eStd').value,recertMonths:+$('#eRecert').value,source:$('#eSource').value,status:$('#eStatus').value,effectiveDate:$('#eDate').value,revisionReason:$('#eReason').value};if(existing){existing.status='Superseded';data.revision=(existing.revision||1)+1;data.previousRevision=existing.revision||1;state.tasks.push(data);audit('REVISE','METL Task',tid,`Revision ${data.revision} published`,existing,data)}else{state.tasks.push(data);audit('CREATE','METL Task',tid,'Controlled task created',null,data)}closeModal();tasks()}}
 function subtaskEdit(taskId='',id='',cloneMode=false){const source=id?state.subtasks.find(s=>s.id===id):null,old=source&&!cloneMode?source:null;const defaultTask=taskId||state.tasks.find(t=>t.status==='Active')?.id||'';const p=source?clone(source):{id:'',taskId:defaultTask,sequence:state.subtasks.filter(s=>s.taskId===defaultTask).length+1,requiredLevel:'-10',criticality:'Supporting',status:'Active',name:'',standard:'',evaluationMethod:'Direct Observation',evidence:'',source:'',retrainingInterval:'',reassessmentInterval:'',srLeadVerification:false,independentAuthorization:false};if(cloneMode){p.id='';p.name=(p.name||'')+' (Copy)'}modal(`<h2>${old?'Revise':cloneMode?'Clone':'Create'} supporting subtask</h2><div class="form-grid"><label>Parent METL task<select id="sTask">${state.tasks.filter(t=>t.status==='Active').map(t=>`<option value="${t.id}" ${p.taskId===t.id?'selected':''}>${t.id} — ${esc(t.name)}</option>`).join('')}</select></label><label>Subtask ID<input id="sId" value="${esc(p.id)}" ${old?'readonly':''} placeholder="Example: M04-017"></label><label>Sequence<input id="sSeq" type="number" value="${p.sequence||1}"></label><label>Qualification level<select id="sLevel">${Object.keys(levelRank).map(x=>`<option ${p.requiredLevel===x?'selected':''}>${x}</option>`).join('')}</select></label><label class="full">Subtask name<textarea id="sName">${esc(p.name)}</textarea></label><label>Criticality<select id="sCritical"><option ${p.criticality==='Supporting'?'selected':''}>Supporting</option><option ${p.criticality==='Critical Gate'?'selected':''}>Critical Gate</option></select></label><label>Status<select id="sStatus"><option ${p.status!=='Inactive'?'selected':''}>Active</option><option ${p.status==='Inactive'?'selected':''}>Inactive</option></select></label><label>Evaluation method<input id="sMethod" value="${esc(p.evaluationMethod)}"></label><label>Training source / reference<input id="sSource" value="${esc(p.source)}"></label><label class="full">Performance standard<textarea id="sStd">${esc(p.standard)}</textarea></label><label class="full">Required evidence<textarea id="sEvidence">${esc(p.evidence)}</textarea></label><label>Retraining interval<input id="sRetrain" value="${esc(p.retrainingInterval)}"></label><label>Reassessment interval<input id="sReassess" value="${esc(p.reassessmentInterval)}"></label><label>Sr. Lead verification<select id="sVerify"><option value="false" ${!p.srLeadVerification?'selected':''}>No</option><option value="true" ${p.srLeadVerification?'selected':''}>Yes</option></select></label><label>Independent performance<select id="sInd"><option value="false" ${!p.independentAuthorization?'selected':''}>No</option><option value="true" ${p.independentAuthorization?'selected':''}>Yes</option></select></label><label class="full">Revision reason / notes<textarea id="sReason">${esc(p.revisionNote)}</textarea></label></div><div class="actions"><button class="primary" id="saveSub">${old?'Save revision':'Add subtask'}</button><button class="secondary close">Cancel</button></div>`);$('#sTask').onchange=()=>{if(!old&&!$('#sId').value.trim()){const t=$('#sTask').value,n=state.subtasks.filter(x=>x.taskId===t).length+1;$('#sId').value=t+'-'+String(n).padStart(3,'0')}};$('#sTask').dispatchEvent(new Event('change'));$('#saveSub').onclick=()=>{const data={...p,taskId:$('#sTask').value,id:$('#sId').value.trim(),sequence:+$('#sSeq').value,name:$('#sName').value.trim(),requiredLevel:$('#sLevel').value,criticality:$('#sCritical').value,status:$('#sStatus').value,evaluationMethod:$('#sMethod').value,source:$('#sSource').value,standard:$('#sStd').value,evidence:$('#sEvidence').value,retrainingInterval:$('#sRetrain').value,reassessmentInterval:$('#sReassess').value,srLeadVerification:$('#sVerify').value==='true',independentAuthorization:$('#sInd').value==='true',revisionNote:$('#sReason').value};if(!data.taskId||!data.id||!data.name)return toast('Parent task, Subtask ID, and name are required');if(!old&&state.subtasks.some(x=>x.id===data.id))return toast('Subtask ID already exists');if(old){const before=clone(old);Object.assign(old,data);audit('UPDATE','Subtask',old.id,'Controlled subtask revised',before,old)}else{state.subtasks.push(data);audit('CREATE','Subtask',data.id,cloneMode?'Subtask cloned':'Controlled subtask created',null,data)}closeModal();tasks()}}
 
 function matrixView(){const people=activePeople(),tasks=state.tasks.filter(t=>t.status==='Active');page('Readiness Matrix','Calculated from current assessment results; higher levels include all lower-level requirements',`<div class="filters"><select id="mxShift"><option value="">All shifts</option>${['A','B','C','D'].map(x=>`<option>${x}</option>`).join('')}</select><input id="mxSearch" placeholder="Search name, employee #, shift, role, or level"></div><div id="mxTable"></div>`);const draw=()=>{const sh=$('#mxShift').value,q=$('#mxSearch').value,rows=people.filter(p=>(!sh||p.shift===sh)&&SearchEngine.matchPerson(p,q));$('#mxTable').innerHTML=`<div class="table-wrap matrix-table"><table><thead><tr><th>Associate</th><th>Shift</th><th>Role</th><th>Assigned</th><th>Highest qualified</th>${tasks.map(t=>`<th>${t.id}</th>`).join('')}<th>Readiness</th></tr></thead><tbody>${rows.map(p=>{const m=personMetrics(p),latest=latestResults(p.employeeNumber);return`<tr><td>${esc(p.name)}</td><td>${p.shift}</td><td>${p.role}</td><td>${p.assignedLevel}</td><td>${m.highest}</td>${tasks.map(t=>{const subs=state.subtasks.filter(s=>s.taskId===t.id&&s.status==='Active'&&levelRank[s.requiredLevel]<=levelRank[p.assignedLevel]);const vals=subs.map(s=>latest.get(p.employeeNumber+'|'+s.id)?.result||'NE');let r=vals.length&&vals.every(x=>x==='GO')?'GO':vals.some(x=>x==='NO-GO')?'NO-GO':vals.some(x=>x==='REQUIRES ASSISTANCE')?'ASSIST':'NE';return`<td><span class="pill ${r==='GO'?'go':r==='NO-GO'?'nogo':r==='ASSIST'?'warn':'ne'}">${r}</span></td>`}).join('')}<td>${m.pct}%</td></tr>`}).join('')}</tbody></table></div>`};$('#mxShift').oninput=draw;$('#mxSearch').oninput=draw;draw()}
-function assess(){const people=activePeople(),tasks=state.tasks.filter(t=>t.status==='Active');page('Assessment Session','Approved evaluator authority, Critical Gates, evidence, and historical preservation are enforced',`<div class="card form-grid"><label>Associate<select id="aPerson"><option value="">Select associate</option>${people.map(p=>`<option value="${p.employeeNumber}">${esc(p.name)} · ${p.shift} · ${p.assignedLevel}</option>`).join('')}</select></label><label>METL task<select id="aTask"><option value="">Select task</option>${tasks.map(t=>`<option value="${t.id}">${t.id} — ${esc(t.name)} (${t.requiredLevel})</option>`).join('')}</select></label><label>Evaluation date<input id="aDate" type="date" value="${today()}"></label><label>Method<select id="aMethod">${['Hands-On','Direct Observation','Oral Questioning','Written Test','Simulation','Document Review','Combined'].map(x=>`<option>${x}</option>`).join('')}</select></label><label>Production line / location<input id="aLine"></label><label>Session notes<input id="aNotes"></label></div><div id="evalSubs"></div>`);$('#aPerson').onchange=drawAssessment;$('#aTask').onchange=drawAssessment}
+function assess(){
+  const initialDept=defaultDepartmentId();
+  const tasks=state.tasks.filter(t=>t.status==='Active');
+
+  page(
+    'Assessment Session',
+    'Approved evaluator authority, Critical Gates, evidence, and historical preservation are enforced',
+    `<div class="card form-grid">
+      <label>Department
+        <select id="aDepartment">${departmentOptions(initialDept)}</select>
+      </label>
+
+      <label class="full">Find associate
+        <input id="aPersonSearch" type="search" inputmode="search" autocomplete="off"
+          placeholder="Search by associate name or employee #">
+      </label>
+
+      <label>Associate
+        <select id="aPerson"><option value="">Select associate</option></select>
+      </label>
+
+      <label>METL task
+        <select id="aTask"><option value="">Select task</option></select>
+      </label>
+
+      <label>Evaluation date<input id="aDate" type="date" value="${today()}"></label>
+      <label>Method<select id="aMethod">${['Hands-On','Direct Observation','Oral Questioning','Written Test','Simulation','Document Review','Combined'].map(x=>`<option>${x}</option>`).join('')}</select></label>
+      <label>Production line / location<input id="aLine"></label>
+      <label>Session notes<input id="aNotes"></label>
+    </div>
+    <div id="evalSubs"></div>`
+  );
+
+  const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+
+  const refreshAssociateList=()=>{
+    const dept=$('#aDepartment').value;
+    const q=norm($('#aPersonSearch').value);
+    const current=$('#aPerson').value;
+
+    const people=activePeople()
+      .filter(p=>!dept||String(p.departmentId)===String(dept))
+      .filter(p=>{
+        if(!q)return true;
+        return norm(`${p.name} ${p.employeeNumber}`).includes(q);
+      })
+      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+
+    $('#aPerson').innerHTML=
+      `<option value="">Select associate</option>`+
+      people.map(p=>`<option value="${esc(p.employeeNumber)}">${esc(p.name)} · #${esc(p.employeeNumber)} · ${esc(p.shift)} · ${esc(p.assignedLevel)}</option>`).join('');
+
+    if(people.some(p=>String(p.employeeNumber)===String(current)))$('#aPerson').value=current;
+  };
+
+  const refreshTaskList=()=>{
+    const dept=$('#aDepartment').value;
+    const current=$('#aTask').value;
+    const rows=tasks.filter(t=>!dept||String(t.departmentId||defaultDepartmentId())===String(dept));
+    $('#aTask').innerHTML=
+      `<option value="">Select task</option>`+
+      rows.map(t=>`<option value="${esc(t.id)}">${esc(t.id)} — ${esc(t.name)} (${esc(t.requiredLevel)})</option>`).join('');
+    if(rows.some(t=>String(t.id)===String(current)))$('#aTask').value=current;
+  };
+
+  $('#aDepartment').onchange=()=>{
+    $('#aPersonSearch').value='';
+    refreshAssociateList();
+    refreshTaskList();
+    $('#evalSubs').innerHTML='';
+  };
+  $('#aPersonSearch').oninput=refreshAssociateList;
+  $('#aPersonSearch').onsearch=refreshAssociateList;
+  $('#aPerson').onchange=drawAssessment;
+  $('#aTask').onchange=drawAssessment;
+
+  refreshAssociateList();
+  refreshTaskList();
+}
 function drawAssessment(){const emp=$('#aPerson').value,tid=$('#aTask').value;if(!emp||!tid)return $('#evalSubs').innerHTML='';const p=state.personnel.find(x=>x.employeeNumber===emp),t=state.tasks.find(x=>x.id===tid);if(levelRank[t.requiredLevel]>levelRank[currentUser.maxLevel||'-40'])return $('#evalSubs').innerHTML='<div class="card bad">Evaluator is not authorized for this qualification level.</div>';const subs=state.subtasks.filter(s=>s.taskId===tid&&s.status==='Active'&&levelRank[s.requiredLevel]<=levelRank[p.assignedLevel]);$('#evalSubs').innerHTML=`<h3>${subs.length} applicable subtasks</h3>${subs.map(s=>`<div class="subtask-eval ${s.criticality==='Critical Gate'?'critical-box':''}" data-sub="${s.id}"><div class="page-head"><div><h4>${s.id}</h4><p>${esc(s.name)}</p></div>${s.criticality==='Critical Gate'?'<span class="pill critical">Critical Gate</span>':''}</div><p><b>Standard:</b> ${esc(s.standard)}</p><p><b>Required evidence:</b> ${esc(s.evidence)}</p><div class="form-grid"><label>Rating<select class="r"><option>NOT EVALUATED</option><option>GO</option><option>NO-GO</option><option>REQUIRES ASSISTANCE</option><option>SUSPENDED</option></select></label><label>Evidence reference<input class="ev" placeholder="Photo, document, test, observation"></label><label class="full">Evaluator observations<textarea class="obs"></textarea></label>${s.srLeadVerification?'<label>Sr. Lead verification<select class="verify"><option value="">Pending</option><option>Verified</option><option>Not Verified</option></select></label>':''}</div></div>`).join('')}<div class="card form-grid"><label>Retraining required<select id="aRetrain"><option>No</option><option>Yes</option></select></label><label>Reassessment date<input id="aReDate" type="date"></label><label class="full">Corrective action summary<textarea id="aCorrective"></textarea></label></div><button class="primary" id="submitAssessment">Sign and submit assessment</button>`;$('#submitAssessment').onclick=submitAssessment}
 function submitAssessment(){const emp=$('#aPerson').value,tid=$('#aTask').value,p=state.personnel.find(x=>x.employeeNumber===emp),t=state.tasks.find(x=>x.id===tid),sid=uid('ASMT');const rows=$$('.subtask-eval').map(box=>{const s=state.subtasks.find(x=>x.id===box.dataset.sub);return{subtaskId:s.id,subtaskName:s.name,criticality:s.criticality,requiredLevel:s.requiredLevel,result:box.querySelector('.r').value,evidenceReference:box.querySelector('.ev').value,observation:box.querySelector('.obs').value,srLeadVerification:box.querySelector('.verify')?.value||''}});if(rows.every(r=>r.result==='NOT EVALUATED'))return toast('Evaluate at least one subtask');const criticalFail=rows.some(r=>r.criticality==='Critical Gate'&&r.result!=='GO'&&r.result!=='NOT EVALUATED');const noGo=rows.some(r=>r.result==='NO-GO'),assist=rows.some(r=>r.result==='REQUIRES ASSISTANCE');const finalStatus=criticalFail?'UNQUALIFIED — CRITICAL GATE':noGo?'UNQUALIFIED':assist?'REQUIRES ASSISTANCE':'RECORDED';const session={id:sid,employeeNumber:emp,associateName:p.name,shift:p.shift,role:p.role,assignedLevel:p.assignedLevel,taskId:tid,taskName:t.name,taskRevision:t.revision,date:$('#aDate').value,evaluatorName:currentUser.name,evaluatorUsername:currentUser.username,method:$('#aMethod').value,status:'Closed',location:$('#aLine').value,notes:$('#aNotes').value,finalStatus,retrainingRequired:$('#aRetrain').value,reassessmentDate:$('#aReDate').value,correctiveAction:$('#aCorrective').value,signature:`${currentUser.name} · ${new Date().toLocaleString()}`};state.sessions.push(session);for(const r of rows){state.results.push({sessionId:sid,employeeNumber:emp,associateName:p.name,shift:p.shift,role:p.role,taskId:tid,taskName:t.name,date:session.date,evaluatorName:currentUser.name,...r,recordStatus:'Historical'});if(['NO-GO','SUSPENDED'].includes(r.result)||(r.criticality==='Critical Gate'&&r.result==='REQUIRES ASSISTANCE')){const due=$('#aReDate').value||new Date(Date.now()+state.settings.defaultCorrectiveActionDays*86400000).toISOString().slice(0,10);state.actions.push({id:uid('CA'),employeeNumber:emp,employee:p.name,shift:p.shift,taskId:tid,subtaskId:r.subtaskId,standardNotMet:r.observation||r.subtaskName,immediateCoaching:'',requiredRetraining:$('#aCorrective').value||'Targeted retraining required',responsibleTrainer:currentUser.name,targetDate:due,reassessmentDate:$('#aReDate').value,reassessmentResult:'',status:'Open',criticality:r.criticality,created:new Date().toISOString(),createdBy:currentUser.name})}}audit('SUBMIT','Assessment',sid,`${p.name} / ${tid} / ${finalStatus}`,null,session);toast(criticalFail?'Saved — Critical Gate blocks qualification':'Assessment saved and signed');sessionHistory()}
 function sessionTable(rows){return`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Associate</th><th>Task</th><th>Evaluator</th><th>Method</th><th>Final status</th><th></th></tr></thead><tbody>${rows.map(s=>`<tr><td>${esc(s.date)}</td><td>${esc(s.associateName)}</td><td>${s.taskId} — ${esc(s.taskName)}</td><td>${esc(s.evaluatorName)}</td><td>${esc(s.method)}</td><td><span class="pill ${String(s.finalStatus).includes('CRITICAL')?'critical':String(s.finalStatus).includes('UNQUALIFIED')?'nogo':'go'}">${esc(s.finalStatus||s.status)}</span></td><td><button class="secondary sv" data-id="${s.id}">View</button></td></tr>`).join('')||'<tr><td colspan="7">No assessment sessions.</td></tr>'}</tbody></table></div>`}
@@ -574,65 +706,229 @@ function metlIntelligence(){const all=aiShiftSummary(''),coverage=aiCoverage(),a
 
 function ensureUserForPerson(p){let u=authUsers.find(x=>String(x.employeeNumber||'')===String(p.employeeNumber)||x.name===p.name);if(!u){u={username:String(p.employeeNumber),name:p.name,employeeNumber:String(p.employeeNumber),role:'viewer',password:'RP'+p.employeeNumber,mustChange:true,maxLevel:p.assignedLevel||'-10',language:'en',manageMetl:false,managePersonnel:false};authUsers.push(u);saveUsers()}return u}
 function userEdit(emp){const p=state.personnel.find(x=>x.employeeNumber===emp);if(!p)return;const u=ensureUserForPerson(p),oldP=clone(p),oldU=clone(u);let pendingPhoto=p.photo||'';modal(`<h2>Edit user</h2><div class="user-edit-hero"><div id="userPhotoPreview">${employeePhoto(p,'employee-photo-large')}</div><div><h3>${esc(p.name)}</h3><p>Employee #${esc(p.employeeNumber)} · ${esc(p.shift)} Shift · ${esc(p.role)}</p><label class="photo-upload">Add or change photo<input id="uPhoto" type="file" accept="image/*" capture="environment"></label><button class="secondary" id="uRemovePhoto">Remove photo</button></div></div><div class="form-grid"><label>Employee number<input id="uEmp" value="${esc(p.employeeNumber)}"></label><label>Name<input id="uName" value="${esc(p.name)}"></label><label>Position / role<select id="uRole">${['Operator','Sr. Lead','Supervisor'].map(x=>`<option ${p.role===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Shift<select id="uShift">${['A','B','C','D'].map(x=>`<option ${p.shift===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Assigned qualification<select id="uAssigned">${Object.keys(levelRank).map(x=>`<option ${p.assignedLevel===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Employment status<select id="uStatus">${['Active','Leave of Absence','Inactive','Terminated'].map(x=>`<option ${p.status===x?'selected':''}>${x}</option>`).join('')}</select></label><label>System access<select id="uAccess"><option value="viewer" ${u.role==='viewer'?'selected':''}>Read only</option><option value="evaluator" ${u.role==='evaluator'?'selected':''}>Approved evaluator</option><option value="admin" ${u.role==='admin'?'selected':''}>Administrator</option></select></label><label>Maximum evaluator level<select id="uMax">${Object.keys(levelRank).map(x=>`<option ${u.maxLevel===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Preferred language<select id="uLang"><option value="en" ${u.language!=='es'?'selected':''}>English</option><option value="es" ${u.language==='es'?'selected':''}>Español</option></select></label><label>Account status<select id="uEnabled"><option value="true" ${u.disabled!==true?'selected':''}>Active</option><option value="false" ${u.disabled===true?'selected':''}>Disabled</option></select></label><label class="mini-check"><input id="uManageMetl" type="checkbox" ${u.manageMetl?'checked':''}> Manage METL Tasks and Subtasks</label><label class="mini-check"><input id="uManagePeople" type="checkbox" ${u.managePersonnel?'checked':''}> Manage personnel</label><label class="full">Qualified production lines<input id="uLines" value="${esc(p.qualifiedLines)}"></label><label class="full">Notes<textarea id="uNotes">${esc(p.notes)}</textarea></label></div><div class="actions"><button class="primary" id="saveUserEdit">Save user</button><button class="secondary" id="resetUserPwd">Reset password</button><button class="secondary close">Cancel</button></div>`);$('#uPhoto').onchange=e=>readEmployeePhoto(e.target.files[0],data=>{pendingPhoto=data;$('#userPhotoPreview').innerHTML=data?`<img class="employee-photo-large" src="${data}" alt="Employee photo preview">`:'<div class="employee-photo-large photo-placeholder">?</div>'});$('#uRemovePhoto').onclick=()=>{pendingPhoto='';$('#userPhotoPreview').innerHTML='<div class="employee-photo-large photo-placeholder">?</div>'};$('#resetUserPwd').onclick=()=>{u.password='RP'+p.employeeNumber;u.mustChange=true;saveUsers();audit('RESET','User Password',u.username,'Temporary password restored');toast('Temporary password: RP'+p.employeeNumber)};$('#saveUserEdit').onclick=()=>{const newEmp=$('#uEmp').value.trim(),newName=$('#uName').value.trim();if(!newEmp||!newName)return toast('Employee number and name are required');if(state.personnel.some(x=>x.employeeNumber===newEmp&&x.positionId!==p.positionId))return toast('Employee number must be unique');Object.assign(p,{employeeNumber:newEmp,name:newName,role:$('#uRole').value,shift:$('#uShift').value,assignedLevel:$('#uAssigned').value,status:$('#uStatus').value,qualifiedLines:$('#uLines').value,notes:$('#uNotes').value,photo:pendingPhoto});Object.assign(u,{employeeNumber:newEmp,name:newName,role:$('#uAccess').value,maxLevel:$('#uMax').value,language:$('#uLang').value,disabled:($('#uStatus').value!=='Active'||$('#uEnabled').value!=='true'),manageMetl:$('#uManageMetl').checked,managePersonnel:$('#uManagePeople').checked});if(oldU.username===String(oldP.employeeNumber))u.username=newEmp;saveUsers();audit('UPDATE','Personnel & User',newEmp,'Profile, photo, language, or permissions updated',{person:oldP,user:oldU},{person:p,user:u});closeModal();settings()}}
-function settings(){page('Administration','Fast user management, authority, backups, and controlled recovery',`<div class="admin-search card"><div><h3>User management</h3><p>Find an employee, edit authority, or create a new employee and login account.</p><button class="primary" id="adminAddEmployee">Add new employee</button></div><div class="filters"><input id="adminSearch" type="search" placeholder="Search name or employee #"><select id="adminShift"><option value="">All shifts</option>${['A','B','C','D'].map(x=>`<option>${x}</option>`).join('')}</select><select id="adminRole"><option value="">All positions</option><option>Operator</option><option>Sr. Lead</option><option>Supervisor</option></select><select id="adminStatus"><option value="">All employment statuses</option><option>Active</option><option>Leave of Absence</option><option>Inactive</option><option>Terminated</option></select><select id="adminAccess"><option value="">All access levels</option><option value="viewer">Read only</option><option value="evaluator">Evaluator</option><option value="admin">Administrator</option></select></div></div><div id="adminUsers" class="admin-user-grid"></div><div class="grid admin-lower"><div class="card"><h3>System rules</h3><label>Reassessment warning days<input id="setWarn" type="number" value="${state.settings.reassessmentWarningDays}"></label><label>Default corrective-action days<input id="setCA" type="number" value="${state.settings.defaultCorrectiveActionDays}"></label><button class="primary" id="saveSettings">Save settings</button></div><div class="card"><h3>Backup and recovery</h3><button class="secondary" id="backupBtn">Download JSON backup</button><label class="file-label">Restore JSON backup<input id="restoreFile" type="file" accept="application/json"></label><button class="secondary" id="resetBaseline">Restore workbook baseline</button></div><div class="card"><h3>Data exports</h3><button class="secondary" id="exportPeople">Personnel CSV</button><button class="secondary" id="exportTasks">Tasks & subtasks CSV</button><button class="secondary" id="exportAssess2">Assessments CSV</button></div></div>`);const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();const draw=()=>{const q=norm($('#adminSearch').value),sh=$('#adminShift').value,role=$('#adminRole').value,status=$('#adminStatus').value,access=$('#adminAccess').value;const people=state.personnel.filter(p=>p.employeeNumber&&p.name).filter(p=>{const u=authUsers.find(x=>String(x.employeeNumber||'')===String(p.employeeNumber)||x.name===p.name);const hay=norm(`${p.employeeNumber} ${p.name} ${p.role} ${p.shift}`);return(!q||hay.includes(q))&&(!sh||p.shift===sh)&&(!role||p.role===role)&&(!status||p.status===status)&&(!access||(u?.role||'viewer')===access)});$('#adminUsers').innerHTML=people.map(p=>{const u=authUsers.find(x=>String(x.employeeNumber||'')===String(p.employeeNumber)||x.name===p.name)||{role:'viewer',maxLevel:p.assignedLevel};return`<article class="admin-user-card">${employeePhoto(p,'employee-photo')}<div class="admin-user-main"><h3>${esc(p.name)}</h3><p>Employee #${esc(p.employeeNumber)} · ${p.shift} Shift</p><div class="user-meta"><span>${esc(p.role)}</span><span>${esc(p.assignedLevel)}</span><span>${u.role==='evaluator'?'Evaluator '+(u.maxLevel||''):u.role==='admin'?'Administrator':'Read only'}</span></div></div><div class="actions"><button class="primary editUser" data-emp="${p.employeeNumber}">Edit user</button><button class="secondary viewUser" data-emp="${p.employeeNumber}">View profile</button></div></article>`}).join('')||'<div class="card empty-state"><b>No users found</b><p>Try a different name, employee number, shift, or access filter.</p></div>';$$('.editUser').forEach(b=>b.onclick=()=>userEdit(b.dataset.emp));$$('.viewUser').forEach(b=>b.onclick=()=>personDetail(b.dataset.emp))};['adminSearch','adminShift','adminRole','adminStatus','adminAccess'].forEach(id=>['input','change','search'].forEach(ev=>$(`#${id}`).addEventListener(ev,draw)));draw();$('#adminAddEmployee').onclick=()=>personEdit();$('#saveSettings').onclick=()=>{state.settings.reassessmentWarningDays=+$('#setWarn').value;state.settings.defaultCorrectiveActionDays=+$('#setCA').value;audit('UPDATE','System Settings','global','Settings updated');toast('Settings saved')};$('#backupBtn').onclick=()=>download(JSON.stringify(state,null,2),`RP-IA-backup-${today()}.json`,'application/json');$('#restoreFile').onchange=restoreBackup;$('#resetBaseline').onclick=()=>{if(!confirm('Restore workbook baseline? Current pilot changes will be replaced. Download a backup first.'))return;state=normalize(clone(window.METL_BASELINE));audit('RESTORE','System','baseline','Workbook baseline restored');dashboard()};$('#exportPeople').onclick=exportPersonnel;$('#exportTasks').onclick=exportTasks;$('#exportAssess2').onclick=exportAssessments}
+function settings(){
+  page(
+    'Administration',
+    'User management, departments, authority, backups, and controlled recovery',
+    `<div class="admin-search card">
+      <div>
+        <h3>User management</h3>
+        <p>Find an employee, edit authority, or create a new employee and login account.</p>
+        <button class="primary" id="adminAddEmployee">Add new employee</button>
+      </div>
+      <div class="filters">
+        <input id="adminSearch" type="search" placeholder="Search name or employee #">
+        <select id="adminDepartment">${departmentOptions('',true)}</select>
+        <select id="adminShift"><option value="">All shifts</option>${['A','B','C','D'].map(x=>`<option>${x}</option>`).join('')}</select>
+        <select id="adminRole"><option value="">All positions</option><option>Operator</option><option>Sr. Lead</option><option>Supervisor</option></select>
+        <select id="adminStatus"><option value="">All employment statuses</option><option>Active</option><option>Leave of Absence</option><option>Inactive</option><option>Terminated</option></select>
+        <select id="adminAccess"><option value="">All access levels</option><option value="viewer">Read only</option><option value="evaluator">Evaluator</option><option value="admin">Administrator</option></select>
+      </div>
+    </div>
 
+    <div class="card department-admin">
+      <div class="section-heading">
+        <div><h3>Departments</h3><p>Add departments without rebuilding the application.</p></div>
+        <button class="primary" id="addDepartment">Add department</button>
+      </div>
+      <div id="departmentList" class="department-list"></div>
+    </div>
 
-function csv(rows){
-  return rows.map(row=>row.map(value=>{
-    const text=String(value??'');
-    return /[",\n\r]/.test(text)?`"${text.replace(/"/g,'""')}"`:text;
-  }).join(',')).join('\r\n');
-}
-function download(content,filename,mime='text/csv;charset=utf-8'){
-  const blob=content instanceof Blob?content:new Blob([content],{type:mime});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;a.download=filename;a.style.display='none';
-  document.body.appendChild(a);a.click();a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
-}
-function exportDashboard(){
-  const people=activePeople();
-  const metrics=people.map(p=>({...p,...personMetrics(p)}));
-  const rows=[
-    ['Metric','Value'],
-    ['Generated',new Date().toLocaleString()],
-    ['Active associates',metrics.length],
-    ['Fully ready',metrics.filter(x=>x.pct===100&&!x.open&&!x.critical).length],
-    ['Open corrective actions',state.actions.filter(a=>a.status!=='Closed').length],
-    ['Critical failures',metrics.reduce((sum,x)=>sum+(x.critical||0),0)],
-    ['Overdue actions',state.actions.filter(a=>a.status!=='Closed'&&a.targetDate&&a.targetDate<today()).length],
-    [],
-    ['Shift','Active associates','Readiness %','Critical failures'],
-    ...['A','B','C','D'].map(shift=>{
-      const group=metrics.filter(x=>x.shift===shift);
-      return [shift,group.length,group.length?Math.round(group.reduce((sum,x)=>sum+x.pct,0)/group.length):0,group.reduce((sum,x)=>sum+(x.critical||0),0)];
-    })
-  ];
-  download(csv(rows),`RP-IA-dashboard-${today()}.csv`);
-}
+    <div id="adminUsers" class="admin-user-grid"></div>
 
-function exportPersonnel(){const h=['Position ID','Employee #','Name','Shift','Role','Status','Assigned Level','Approved Level','Qualified Lines','Hire Date','Extrusion Date','Supervisor','Notes'];download(csv([h,...state.personnel.map(p=>h.map(k=>({'Position ID':p.positionId,'Employee #':p.employeeNumber,'Name':p.name,'Shift':p.shift,'Role':p.role,'Status':p.status,'Assigned Level':p.assignedLevel,'Approved Level':p.approvedLevel,'Qualified Lines':p.qualifiedLines,'Hire Date':p.hireDate,'Extrusion Date':p.extrusionDate,'Supervisor':p.supervisor,'Notes':p.notes}[k])))]),`METL-personnel-${today()}.csv`)}
-function exportTasks(){const h=['Record Type','Task ID','Subtask ID','Name','Domain','Level','Criticality','Standard','Evidence','Source','Status','Revision'];const rows=[h,...state.tasks.map(t=>['Task',t.id,'',t.name,t.domain,t.requiredLevel,'',t.trainedStandard,'',t.source,t.status,t.revision]),...state.subtasks.map(s=>['Subtask',s.taskId,s.id,s.name,s.domain,s.requiredLevel,s.criticality,s.standard,s.evidence,s.source,s.status,s.revisionNote])];download(csv(rows),`METL-task-library-${today()}.csv`)}
-function exportAssessments(){const h=['Session ID','Date','Employee #','Associate','Shift','Role','Task ID','Task Name','Subtask ID','Subtask Name','Criticality','Result','Evidence','Observation','Evaluator','Final Status','Reassessment Date'];const rows=[h,...state.results.map(r=>{const s=state.sessions.find(x=>x.id===r.sessionId)||{};return[r.sessionId,r.date,r.employeeNumber,r.associateName,r.shift,r.role,r.taskId,r.taskName,r.subtaskId,r.subtaskName,r.criticality,r.result,r.evidenceReference,r.observation,r.evaluatorName,s.finalStatus,s.reassessmentDate]})];download(csv(rows),`METL-assessments-${today()}.csv`)}
-function exportAudit(){const h=['Date Time','User','Action','Entity','ID','Detail','Previous','New'];download(csv([h,...state.audit.map(a=>[a.time,a.user,a.action,a.entity,a.id,a.detail,JSON.stringify(a.before||''),JSON.stringify(a.after||'')])]),`METL-audit-${today()}.csv`)}
+    <div class="grid admin-lower">
+      <div class="card">
+        <h3>System rules</h3>
+        <label>Default department<select id="defaultDepartment">${departmentOptions(defaultDepartmentId())}</select></label>
+        <label>Reassessment warning days<input id="setWarn" type="number" value="${state.settings.reassessmentWarningDays}"></label>
+        <label>Default corrective-action days<input id="setCA" type="number" value="${state.settings.defaultCorrectiveActionDays}"></label>
+        <button class="primary" id="saveSettings">Save settings</button>
+      </div>
+      <div class="card">
+        <h3>Backup and recovery</h3>
+        <button class="secondary" id="backupBtn">Download JSON backup</button>
+        <label class="file-label">Restore JSON backup<input id="restoreFile" type="file" accept="application/json"></label>
+        <button class="secondary" id="resetBaseline">Restore workbook baseline</button>
+      </div>
+      <div class="card">
+        <h3>Data exports</h3>
+        <button class="secondary" id="exportPeople">Personnel CSV</button>
+        <button class="secondary" id="exportTasks">Tasks & subtasks CSV</button>
+        <button class="secondary" id="exportAssess2">Assessments CSV</button>
+      </div>
+    </div>`
+  );
+
+  const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+
+  const drawDepartments=()=>{
+    $('#departmentList').innerHTML=activeDepartments().map(d=>{
+      const people=state.personnel.filter(p=>p.status==='Active'&&String(p.departmentId)===String(d.id)).length;
+      const tasks=state.tasks.filter(t=>t.status==='Active'&&String(t.departmentId||defaultDepartmentId())===String(d.id)).length;
+      return `<article class="department-row">
+        <div><h4>${esc(d.name)}</h4><small>${people} active associates · ${tasks} active METL tasks</small></div>
+        <span class="pill ${d.id===defaultDepartmentId()?'go':'ne'}">${d.id===defaultDepartmentId()?'Default':'Active'}</span>
+      </article>`;
+    }).join('');
+  };
+
+  const drawUsers=()=>{
+    const q=norm($('#adminSearch').value),
+      dept=$('#adminDepartment').value,
+      sh=$('#adminShift').value,
+      role=$('#adminRole').value,
+      status=$('#adminStatus').value,
+      access=$('#adminAccess').value;
+
+    const people=state.personnel.filter(p=>p.employeeNumber&&p.name).filter(p=>{
+      const u=authUsers.find(x=>String(x.employeeNumber||'')===String(p.employeeNumber)||x.name===p.name);
+      const hay=norm(`${p.employeeNumber} ${p.name} ${p.role} ${p.shift} ${departmentName(p.departmentId)}`);
+      return(!q||hay.includes(q))&&
+        (!dept||String(p.departmentId||defaultDepartmentId())===String(dept))&&
+        (!sh||p.shift===sh)&&(!role||p.role===role)&&(!status||p.status===status)&&
+        (!access||(u?.role||'viewer')===access);
+    });
+
+    $('#adminUsers').innerHTML=people.map(p=>{
+      const u=authUsers.find(x=>String(x.employeeNumber||'')===String(p.employeeNumber)||x.name===p.name)||{role:'viewer',maxLevel:p.assignedLevel};
+      return `<article class="admin-user-card">
+        ${employeePhoto(p,'employee-photo')}
+        <div class="admin-user-main">
+          <h3>${esc(p.name)}</h3>
+          <p>Employee #${esc(p.employeeNumber)} · ${esc(departmentName(p.departmentId))} · ${esc(p.shift)} Shift</p>
+          <div class="user-meta">
+            <span>${esc(p.role)}</span><span>${esc(p.assignedLevel)}</span>
+            <span>${u.role==='evaluator'?'Evaluator '+(u.maxLevel||''):u.role==='admin'?'Administrator':'Read only'}</span>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="primary editUser" data-emp="${p.employeeNumber}">Edit user</button>
+          <button class="secondary viewUser" data-emp="${p.employeeNumber}">View profile</button>
+        </div>
+      </article>`;
+    }).join('')||'<div class="card empty-state"><b>No users found</b><p>Try a different filter.</p></div>';
+
+    $$('.editUser').forEach(b=>b.onclick=()=>userEdit(b.dataset.emp));
+    $$('.viewUser').forEach(b=>b.onclick=()=>personDetail(b.dataset.emp));
+  };
+
+  ['adminSearch','adminDepartment','adminShift','adminRole','adminStatus','adminAccess'].forEach(id=>
+    ['input','change','search'].forEach(ev=>$(`#${id}`).addEventListener(ev,drawUsers))
+  );
+
+  drawDepartments();
+  drawUsers();
+
+  $('#addDepartment').onclick=()=>{
+    modal(`<h2>Add department</h2>
+      <div class="form-grid">
+        <label>Department name<input id="deptName" placeholder="Example: Quality"></label>
+        <label>Department code<input id="deptCode" placeholder="QUALITY"></label>
+      </div>
+      <div class="actions">
+        <button class="primary" id="saveDepartment">Add department</button>
+        <button class="secondary close">Cancel</button>
+      </div>`);
+    $('#saveDepartment').onclick=()=>{
+      const name=$('#deptName').value.trim();
+      const code=($('#deptCode').value.trim()||name).toUpperCase().replace(/[^A-Z0-9]+/g,'-').replace(/^-|-$/g,'');
+      if(!name)return toast('Department name is required');
+      if(state.departments.some(d=>norm(d.name)===norm(name)||String(d.code||'').toUpperCase()===code))return toast('Department already exists');
+      const dept={id:uid('DEPT'),name,code,status:'Active',createdAt:new Date().toISOString()};
+      state.departments.push(dept);
+      audit('CREATE','Department',dept.id,`Department ${name} created`,null,dept);
+      save();
+      closeModal();
+      settings();
+    };
+  };
+
+  $('#adminAddEmployee').onclick=()=>personEdit();
+  $('#saveSettings').onclick=()=>{
+    state.settings.defaultDepartmentId=$('#defaultDepartment').value||defaultDepartmentId();
+    state.settings.reassessmentWarningDays=+$('#setWarn').value;
+    state.settings.defaultCorrectiveActionDays=+$('#setCA').value;
+    save();
+    audit('UPDATE','System Settings','global','Settings updated');
+    toast('Settings saved');
+  };
+  $('#backupBtn').onclick=()=>download(JSON.stringify(state,null,2),`RP-backup-${today()}.json`,'application/json');
+  $('#restoreFile').onchange=restoreBackup;
+  $('#resetBaseline').onclick=()=>{
+    if(!confirm('Restore workbook baseline? Current pilot changes will be replaced. Download a backup first.'))return;
+    state=normalize(clone(window.METL_BASELINE));
+    audit('RESTORE','System','baseline','Workbook baseline restored');
+    dashboard();
+  };
+  $('#exportPeople').onclick=exportPersonnel;
+  $('#exportTasks').onclick=exportTasks;
+  $('#exportAssess2').onclick=exportAssessments;
+}
 function restoreBackup(e){const f=e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const obj=JSON.parse(reader.result);state=normalize(obj);audit('RESTORE','System','backup','JSON backup restored');toast('Backup restored');dashboard()}catch{toast('Invalid backup file')}};reader.readAsText(f)}
 function modal(html){document.body.insertAdjacentHTML('beforeend',`<div class="modal"><div class="modal-card">${html}</div></div>`);$$('.close').forEach(b=>b.onclick=closeModal)} function closeModal(){$('.modal')?.remove()}
 $('#langEn').onclick=()=>applyLanguage('en');$('#langEs').onclick=()=>applyLanguage('es');if($('#languageMenuBtn'))$('#languageMenuBtn').onclick=()=>{const menu=$('#languageMenu');const opening=menu.classList.contains('hidden');menu.classList.toggle('hidden');$('#languageMenuBtn').setAttribute('aria-expanded',opening?'true':'false')};document.addEventListener('click',e=>{const wrap=e.target.closest?.('.login-language');if(!wrap){$('#languageMenu')?.classList.add('hidden');$('#languageMenuBtn')?.setAttribute('aria-expanded','false')}});applyLanguage(uiLanguage,false);$('#loginBtn').onclick=login;$('#pin').onkeydown=e=>{if(e.key==='Enter')login()};$('#changePasswordBtn').onclick=changePassword;$('#profileBtn').onclick=()=>navigate('profile');$('#serverConfigBtn').onclick=()=>window.RpiaServerSetup.open();$('#logoutBtn').onclick=logout;$('#menuBtn').onclick=()=>{$('#nav').classList.toggle('open');$('#navScrim').classList.toggle('open')};$('#navScrim').onclick=()=>{$('#nav').classList.remove('open');$('#navScrim').classList.remove('open')};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=9.8.0').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=9.9.0').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});
 
 /* RP v6.1 — core compliance implementation overrides */
 function matrixView(){
-  const tasks=state.tasks.filter(t=>t.status==='Active');
-  page('Readiness Matrix','Personnel data is resolved from the central Personnel Master; qualification levels include lower-level requirements',`<div class="filters"><select id="mxShift"><option value="">All shifts</option>${['A','B','C','D'].map(x=>`<option>${x}</option>`).join('')}</select><input id="mxSearch" type="search" inputmode="search" placeholder="Search name, employee #, shift, role, or level"></div><div id="mxTable"></div>`);
-  const draw=()=>{
-    const sh=$('#mxShift').value,q=$('#mxSearch').value;
-    const rows=PersonnelMaster.active(state).filter(p=>(!sh||p.shift===sh)&&SearchEngine.matchPerson(p,q));
-    $('#mxTable').innerHTML=`<div class="table-wrap matrix-table"><table><thead><tr><th>Employee #</th><th>Associate</th><th>Shift</th><th>Role</th><th>Assigned</th><th>Highest fully qualified</th>${tasks.map(t=>`<th>${t.id}</th>`).join('')}<th>Readiness</th></tr></thead><tbody>${rows.map(p=>{const qs=RulesEngine.qualificationSummary(state,p),latest=latestResults(p.employeeNumber);return`<tr><td><b>${esc(p.employeeNumber)}</b></td><td>${esc(p.name)}</td><td>${esc(p.shift)}</td><td>${esc(p.role)}</td><td>${esc(p.assignedLevel)}</td><td>${esc(qs.highestFullyQualified)}</td>${tasks.map(t=>{const subs=state.subtasks.filter(s=>s.taskId===t.id&&s.status==='Active'&&levelRank[s.requiredLevel]<=levelRank[p.assignedLevel]);const vals=subs.map(s=>latest.get(p.employeeNumber+'|'+s.id)?.result||'NE');let r=vals.length&&vals.every(x=>x==='GO')?'GO':vals.some(x=>x==='NO-GO'||x==='SUSPENDED')?'NO-GO':vals.some(x=>x==='REQUIRES ASSISTANCE')?'ASSIST':'NE';return`<td><span class="pill ${r==='GO'?'go':r==='NO-GO'?'nogo':r==='ASSIST'?'warn':'ne'}">${r}</span></td>`}).join('')}<td>${qs.pct}%</td></tr>`}).join('')||'<tr><td colspan="99">No matching personnel.</td></tr>'}</tbody></table></div>`;
-  };
-  $('#mxShift').oninput=draw;$('#mxSearch').oninput=draw;draw();
-}
+  page(
+    'Readiness Matrix',
+    'Personnel data is resolved from the central Personnel Master; qualification levels include lower-level requirements',
+    `<div class="filters">
+      <select id="mxDepartment">${departmentOptions('',true)}</select>
+      <select id="mxShift"><option value="">All shifts</option>${['A','B','C','D'].map(x=>`<option>${x}</option>`).join('')}</select>
+      <input id="mxSearch" type="search" inputmode="search" placeholder="Search name, employee #, shift, role, or level">
+    </div>
+    <div id="mxTable"></div>`
+  );
 
+  const draw=()=>{
+    const dept=$('#mxDepartment').value;
+    const sh=$('#mxShift').value;
+    const q=$('#mxSearch').value;
+
+    const rows=PersonnelMaster.active(state).filter(p=>
+      (!dept||String(p.departmentId||defaultDepartmentId())===String(dept)) &&
+      (!sh||p.shift===sh) &&
+      SearchEngine.matchPerson(p,q)
+    );
+
+    const cards=rows.map(p=>{
+      const qs=RulesEngine.qualificationSummary(state,p);
+      return `<article class="matrix-person-card">
+        <div class="matrix-person-head">
+          <div>
+            <small>Associate</small>
+            <h3>${esc(p.name)}</h3>
+            <span>#${esc(p.employeeNumber)}</span>
+          </div>
+          <strong>${esc(qs.pct)}%</strong>
+        </div>
+        <div class="matrix-person-grid">
+          <div><small>Department</small><b>${esc(departmentName(p.departmentId))}</b></div>
+          <div><small>Shift</small><b>${esc(p.shift)}</b></div>
+          <div><small>Role</small><b>${esc(p.role)}</b></div>
+          <div><small>Assigned</small><b>${esc(p.assignedLevel)}</b></div>
+          <div><small>Highest fully qualified</small><b>${esc(qs.highestFullyQualified)}</b></div>
+          <div><small>Readiness</small><b>${esc(qs.pct)}%</b></div>
+        </div>
+        <button class="secondary mxOpen" data-emp="${esc(p.employeeNumber)}">View readiness details</button>
+      </article>`;
+    }).join('');
+
+    $('#mxTable').innerHTML=
+      `<div class="card matrix-count"><small><b>${rows.length}</b> associate${rows.length===1?'':'s'} shown</small></div>
+       <div class="matrix-card-list">${cards||'<div class="card empty-state">No matching personnel.</div>'}</div>`;
+
+    $$('.mxOpen').forEach(b=>b.onclick=()=>personDetail(b.dataset.emp));
+  };
+
+  ['mxDepartment','mxShift','mxSearch'].forEach(id=>{
+    $('#'+id).oninput=draw;
+    $('#'+id).onchange=draw;
+  });
+  draw();
+}
 function submitAssessment(){
   const emp=$('#aPerson').value,tid=$('#aTask').value,p=PersonnelMaster.get(state,emp),t=state.tasks.find(x=>x.id===tid&&x.status==='Active'),sid=uid('ASMT');
   const rows=$$('.subtask-eval').map(box=>{const s=state.subtasks.find(x=>x.id===box.dataset.sub);return{subtaskId:s.id,subtaskName:s.name,subtaskRevision:s.revision||1,criticality:s.criticality,requiredLevel:s.requiredLevel,evidenceRequired:!!String(s.evidence||'').trim(),srLeadRequired:!!s.srLeadVerification,result:box.querySelector('.r').value,evidenceReference:box.querySelector('.ev').value,observation:box.querySelector('.obs').value,srLeadVerification:box.querySelector('.verify')?.value||'',standardSnapshot:s.standard||'',evidenceRequirementSnapshot:s.evidence||''}});
@@ -642,14 +938,14 @@ function submitAssessment(){
   const noGo=rows.some(r=>['NO-GO','SUSPENDED'].includes(r.result)),assist=rows.some(r=>r.result==='REQUIRES ASSISTANCE');
   const pendingVerification=rows.some(r=>r.result==='GO'&&r.srLeadRequired&&!String(r.srLeadVerification||'').trim());
   const finalStatus=criticalFail?'UNQUALIFIED — CRITICAL GATE':noGo?'UNQUALIFIED':assist?'REQUIRES ASSISTANCE':pendingVerification?'PENDING SR. LEAD VERIFICATION':'QUALIFIED';
-  const session={id:sid,employeeNumber:emp,associateName:p.name,personnelSnapshot:PersonnelMaster.snapshot(p),shift:p.shift,role:p.role,assignedLevel:p.assignedLevel,taskId:tid,taskName:t.name,taskRevision:t.revision||1,taskSnapshot:{id:t.id,name:t.name,description:t.description||'',standard:t.trainedStandard||'',requiredLevel:t.requiredLevel,revision:t.revision||1},date:$('#aDate').value,evaluatorName:currentUser.name,evaluatorUsername:currentUser.username,evaluatorAuthority:currentUser.maxLevel||'-40',method:$('#aMethod').value,status:pendingVerification?'Pending Verification':'Approved',location:$('#aLine').value,notes:$('#aNotes').value,finalStatus,retrainingRequired:$('#aRetrain').value,reassessmentDate:$('#aReDate').value,correctiveAction:$('#aCorrective').value,signature:`${currentUser.name} · ${new Date().toLocaleString()}`,signedAt:new Date().toISOString(),approvalRequired:pendingVerification,immutable:true};
+  const session={id:sid,departmentId:p.departmentId||defaultDepartmentId(),employeeNumber:emp,associateName:p.name,personnelSnapshot:PersonnelMaster.snapshot(p),shift:p.shift,role:p.role,assignedLevel:p.assignedLevel,taskId:tid,taskName:t.name,taskRevision:t.revision||1,taskSnapshot:{id:t.id,name:t.name,description:t.description||'',standard:t.trainedStandard||'',requiredLevel:t.requiredLevel,revision:t.revision||1},date:$('#aDate').value,evaluatorName:currentUser.name,evaluatorUsername:currentUser.username,evaluatorAuthority:currentUser.maxLevel||'-40',method:$('#aMethod').value,status:pendingVerification?'Pending Verification':'Approved',location:$('#aLine').value,notes:$('#aNotes').value,finalStatus,retrainingRequired:$('#aRetrain').value,reassessmentDate:$('#aReDate').value,correctiveAction:$('#aCorrective').value,signature:`${currentUser.name} · ${new Date().toLocaleString()}`,signedAt:new Date().toISOString(),approvalRequired:pendingVerification,immutable:true};
   state.sessions.push(session);
   for(const r of rows){
-    const resultRecord={sessionId:sid,employeeNumber:emp,associateName:p.name,personnelSnapshot:PersonnelMaster.snapshot(p),shift:p.shift,role:p.role,taskId:tid,taskName:t.name,date:session.date,evaluatorName:currentUser.name,...r,recordStatus:'Historical',createdAt:new Date().toISOString()};
+    const resultRecord={sessionId:sid,departmentId:p.departmentId||defaultDepartmentId(),employeeNumber:emp,associateName:p.name,personnelSnapshot:PersonnelMaster.snapshot(p),shift:p.shift,role:p.role,taskId:tid,taskName:t.name,date:session.date,evaluatorName:currentUser.name,...r,recordStatus:'Historical',createdAt:new Date().toISOString()};
     state.results.push(resultRecord);
     if(['NO-GO','SUSPENDED','REQUIRES ASSISTANCE'].includes(r.result)&&r.result!=='NOT EVALUATED'){
       const due=$('#aReDate').value||new Date(Date.now()+state.settings.defaultCorrectiveActionDays*86400000).toISOString().slice(0,10);
-      const action={id:uid('CA'),employeeNumber:emp,employee:p.name,shift:p.shift,taskId:tid,subtaskId:r.subtaskId,requiredLevel:r.requiredLevel,standardNotMet:r.observation||r.standardSnapshot||r.subtaskName,immediateCoaching:'',requiredRetraining:$('#aCorrective').value||'Targeted retraining required',responsibleTrainer:currentUser.name,targetDate:due,reassessmentDate:$('#aReDate').value,reassessmentResult:'',status:'Open',criticality:r.criticality,created:new Date().toISOString(),createdBy:currentUser.name,sourceAssessmentId:sid,workflowStatus:'Retraining Required'};
+      const action={id:uid('CA'),departmentId:p.departmentId||defaultDepartmentId(),employeeNumber:emp,employee:p.name,shift:p.shift,taskId:tid,subtaskId:r.subtaskId,requiredLevel:r.requiredLevel,standardNotMet:r.observation||r.standardSnapshot||r.subtaskName,immediateCoaching:'',requiredRetraining:$('#aCorrective').value||'Targeted retraining required',responsibleTrainer:currentUser.name,targetDate:due,reassessmentDate:$('#aReDate').value,reassessmentResult:'',status:'Open',criticality:r.criticality,created:new Date().toISOString(),createdBy:currentUser.name,sourceAssessmentId:sid,workflowStatus:'Retraining Required'};
       state.actions.push(action);
       WorkflowEngine.create(state,'Corrective Action & Reassessment',{actionId:action.id,assessmentId:sid,employeeNumber:emp,subtaskId:r.subtaskId},currentUser);
       AuditEngine.record(state,currentUser,'CREATE','Corrective Action',action.id,`${r.result} generated mandatory follow-up`,null,action);

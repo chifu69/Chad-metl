@@ -1,4 +1,4 @@
-const CACHE='rp-v9.8.5-corrective-card-render-fix';
+const CACHE='rp-v9.9.0-multidepartment-assessment-matrix';
 const ASSETS=[
   './',
   './index.html',
