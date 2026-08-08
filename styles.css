@@ -616,7 +616,7 @@ html,body{max-width:100%;overflow-x:hidden}
 .eagle-mini-list span{color:var(--muted);font-size:.86rem}
 
 
-/* v9.23.1 personalized live Eagle experience */
+/* v9.23.0 personalized Eagle experience */
 .eagle-personal-insight{margin-top:10px!important;padding:10px 12px;border-left:3px solid rgba(255,255,255,.55);background:rgba(255,255,255,.07);border-radius:10px;color:#fff!important;font-weight:650}
 .eagle-welcome{margin:12px 14px 4px;padding:12px 14px;border:1px solid rgba(47,121,238,.18);border-radius:16px;background:linear-gradient(135deg,rgba(47,121,238,.11),rgba(102,82,232,.08));display:grid;gap:4px}
 .eagle-welcome b{font-size:1rem;color:var(--text,#122033)}
@@ -624,7 +624,9 @@ html,body{max-width:100%;overflow-x:hidden}
 @media(max-width:620px){.eagle-welcome{margin:9px 10px 3px;padding:10px 12px}.eagle-personal-insight{font-size:.9rem}}
 
 
-/* v9.23.1 live operational briefing */
-.eagle-live-line{font-size:1.02rem;font-weight:800;color:#f3f7ff!important;margin:.8rem 0 .65rem;max-width:760px}
-.command-hero .eyebrow{letter-spacing:.14em}
-.command-status span{font-weight:700}
+/* v9.24.0 Eagle Language Dictionary */
+.eagle-dictionary-list{display:grid;gap:10px;margin-top:14px}
+.eagle-dictionary-row{display:grid;grid-template-columns:minmax(110px,160px) 1fr;gap:12px;align-items:start}
+.eagle-dictionary-row>span{font-weight:850;text-transform:capitalize;padding-top:10px}
+.eagle-dictionary-row textarea{width:100%;min-height:66px;resize:vertical}
+@media(max-width:700px){.eagle-dictionary-row{grid-template-columns:1fr}.eagle-dictionary-row>span{padding-top:0}}

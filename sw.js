@@ -1,4 +1,4 @@
-const CACHE='rp-v9.23.1-eagle-personal-experience';
+const CACHE='rp-v9.24.0-eagle-natural-language-max';
 const ASSETS=[
   './eagle-controller.js',
   './',

@@ -22,6 +22,37 @@ function normalize(s){
   for(const k of ['personnel','evaluators','tasks','subtasks','sessions','results','actions','audit','sources','personnelMatrix','notifications','assessmentAssignments'])if(!Array.isArray(s[k]))s[k]=[];
 
   s.settings={...b.settings,...(s.settings||{})};
+  const EAGLE_LEXICON_DEFAULTS={
+    assessment:['assessment','assessments','evaluation','evaluations','checkoff','check off','skills check','competency check','training check'],
+    assignment:['assignment','assignments','assigned work','assigned assessment','training assignment','scheduled assessment'],
+    task:['task','tasks','metl task','metl tasks','competency task'],
+    subtask:['subtask','subtasks','step','steps','task step'],
+    employee:['employee','employees','associate','associates','operator','operators','personnel','worker','workers','team member'],
+    evaluator:['evaluator','evaluators','trainer','trainers','assessor','assessors'],
+    readiness:['readiness','ready','prepared','preparation','qualified readiness'],
+    advancement:['advance','advancement','next level','move up','promotion','promotion readiness','level up'],
+    corrective:['corrective action','corrective actions','reassessment','reassessments','retraining action'],
+    critical:['critical gate','critical gates','safety gate','critical failure'],
+    knowledge:['knowledge','procedure','procedures','sop','sops','work instruction','work instructions','approved procedure','standard work'],
+    backup:['backup','back up','restore','recovery','data integrity'],
+    cancel:['cancel','stop','never mind','nevermind','forget it','go back','abort'],
+    self:['who am i','what is my name','what is my role','what level am i','what shift am i on','my identity'],
+    list:['list','show all','what are','which are','available','browse'],
+    create:['create','add','new','make','build'],
+    assign:['assign','schedule','give','delegate','set up','setup'],
+    start:['start','begin','conduct','perform','launch','do'],
+    open:['open','show','view','display','go to','take me to','see'],
+    edit:['edit','change','update','modify','revise','correct'],
+    find:['find','search','locate','look for','who','which']
+  };
+  if(!s.settings.eagleLexicon||typeof s.settings.eagleLexicon!=='object'){
+    s.settings.eagleLexicon=clone(EAGLE_LEXICON_DEFAULTS);
+  }else{
+    for(const [k,v] of Object.entries(EAGLE_LEXICON_DEFAULTS)){
+      if(!Array.isArray(s.settings.eagleLexicon[k]))s.settings.eagleLexicon[k]=clone(v);
+    }
+  }
+
 
   // v9.9 multi-department foundation.
   if(!Array.isArray(s.departments))s.departments=[];
@@ -122,7 +153,7 @@ function login(){const name=$('#username').value.trim().toLowerCase(),pwd=$('#pi
 function changePassword(){const a=$('#newPassword').value,b=$('#confirmPassword').value;if(a.length<6)return toast('Use at least 6 characters');if(a!==b)return toast('Passwords do not match');if(a===pendingUser.password)return toast('Choose a different password');pendingUser.password=a;pendingUser.mustChange=false;saveUsers();$('#passwordModal').classList.add('hidden');completeLogin(pendingUser)}
 function completeLogin(u){currentUser=u;uiLanguage=u.language||uiLanguage;applyLanguage(uiLanguage,false);$('#login').classList.add('hidden');$('#app').classList.remove('hidden');$('#serverConfigBtn')?.classList.toggle('hidden',u.role!=='admin');$('#roleBadge').textContent=u.role==='admin'?' · Administrator':u.role==='viewer'?' · Read only':` · Approved Evaluator ${u.maxLevel}`;renderNav();navigate('dashboard')}
 function logout(){currentUser=null;$('#serverConfigBtn')?.classList.add('hidden');$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#pin').value='';$('#username').focus()}
-const RP_VERSION='9.23.1';
+const RP_VERSION='9.24.0';
 const navDefs=[['dashboard','Dashboard','Inicio'],['intelligence','Eagle','Eagle'],['personnel','Personnel','Personal'],['tasks','METL & Subtasks','METL y subtareas'],['matrix','Readiness Matrix','Matriz de preparación'],['assignments','Assigned Assessments','Evaluaciones asignadas'],['assess','Assessment','Evaluación'],['sessions','Assessment History','Historial de evaluaciones'],['actions','Corrective Actions','Acciones correctivas'],['notifications','Notifications','Notificaciones'],['audit','Audit Trail','Auditoría'],['plant','Plant Intelligence','Inteligencia de planta'],['knowledge','Knowledge Center','Centro de conocimiento'],['engines','Engine Center','Centro de motores'],['profile','My Profile','Mi perfil'],['settings','Administration','Administración']];
 function renderNav(){const allowed=navDefs.filter(x=>{if(x[0]==='settings')return currentUser.role==='admin';if(x[0]==='assess')return canEvaluate();if(x[0]==='audit')return currentUser.role==='admin'||currentUser.role==='evaluator';return true});$('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}<small>v${RP_VERSION}</small></div>`;$$('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view))}
 function navigate(v){
@@ -1339,6 +1370,20 @@ function settings(){
 
     <div id="adminUsers" class="admin-user-grid"></div>
 
+    <div class="card eagle-dictionary-admin">
+      <div class="section-heading">
+        <div>
+          <h3>Eagle Language Dictionary</h3>
+          <p>Teach Eagle plant vocabulary, synonyms, abbreviations, and common wording without changing code.</p>
+        </div>
+        <button class="secondary" id="resetEagleDictionary">Restore defaults</button>
+      </div>
+      <div id="eagleDictionaryList" class="eagle-dictionary-list"></div>
+      <div class="actions">
+        <button class="primary" id="saveEagleDictionary">Save Eagle dictionary</button>
+      </div>
+    </div>
+
     <div class="grid admin-lower">
       <div class="card">
         <h3>System rules</h3>
@@ -1421,6 +1466,36 @@ function settings(){
 
   drawDepartments();
   drawUsers();
+
+
+  const drawEagleDictionary=()=>{
+    const lex=state.settings.eagleLexicon||{};
+    $('#eagleDictionaryList').innerHTML=Object.keys(lex).sort().map(key=>`
+      <label class="eagle-dictionary-row">
+        <span>${esc(key)}</span>
+        <textarea data-lexicon="${esc(key)}" rows="2" spellcheck="false">${esc((lex[key]||[]).join(', '))}</textarea>
+      </label>`).join('');
+  };
+  drawEagleDictionary();
+
+  $('#saveEagleDictionary').onclick=()=>{
+    const next={};
+    $$('#eagleDictionaryList [data-lexicon]').forEach(el=>{
+      next[el.dataset.lexicon]=el.value.split(',').map(x=>x.trim()).filter(Boolean);
+    });
+    state.settings.eagleLexicon=next;
+    save();
+    audit('UPDATE','Eagle Dictionary','global','Eagle language dictionary updated');
+    toast('Eagle dictionary saved');
+  };
+
+  $('#resetEagleDictionary').onclick=()=>{
+    if(!confirm('Restore Eagle dictionary defaults? Custom terms will be removed.'))return;
+    state.settings.eagleLexicon=clone(EAGLE_LEXICON_DEFAULTS);
+    save();
+    audit('RESTORE','Eagle Dictionary','global','Eagle language dictionary restored to defaults');
+    settings();
+  };
 
   $('#addDepartment').onclick=()=>{
     modal(`<h2>Add department</h2>
