@@ -1,4 +1,4 @@
-/* RP Eagle Brain Rebuild v9.20.0
+/* RP Eagle Brain Rebuild v9.21.0
    Architecture:
    USER -> EAGLE -> Intent + Entities + Conversation Context
         -> Permission Gate -> Engine Plan -> Existing RP Workflow / Answer
@@ -9,7 +9,7 @@
 (function(){
   'use strict';
 
-  const VERSION='9.20.0';
+  const VERSION='9.21.0';
   const $one=(sel,root=document)=>root.querySelector(sel);
   const $all=(sel,root=document)=>[...root.querySelectorAll(sel)];
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -159,6 +159,95 @@
     return'';
   }
 
+  function phraseBefore(text,token){
+    const i=text.indexOf(` ${token} `);
+    return i>=0?text.slice(0,i).trim():text;
+  }
+  function phraseAfter(text,token){
+    const i=text.indexOf(` ${token} `);
+    return i>=0?text.slice(i+token.length+2).trim():'';
+  }
+
+  function semanticRoles(rawText,peopleHits,evaluatorHits,taskHits,subtaskHits){
+    const text=norm(rawText);
+
+    const personEntries=peopleHits
+      .map(h=>({entity:h.row,pos:h.pos,name:norm(h.row.name)}))
+      .sort((a,b)=>a.pos-b.pos);
+    const evaluatorEntries=evaluatorHits
+      .map(h=>({entity:h.row,pos:h.pos,name:norm(h.row.name||h.row.username)}))
+      .sort((a,b)=>a.pos-b.pos);
+
+    const hasFor=/\bfor\b/.test(text);
+    const hasTo=/\bto\b/.test(text);
+    const hasBy=/\bby\b/.test(text);
+    const hasEvaluateBy=/\b(evaluated by|evaluate by|evaluation by)\b/.test(text);
+
+    let recipient=null,actor=null,evaluator=null;
+
+    // Recipient: person after "for" or "to" wins. This is the key distinction between
+    // "Create new task" (METL authoring) and "Create new task for Luis" (assignment).
+    const forPos=text.indexOf(' for ');
+    const toPos=text.indexOf(' to ');
+    const recipientCandidates=personEntries.filter(x=>
+      (forPos>=0 && x.pos>forPos) || (toPos>=0 && x.pos>toPos)
+    );
+    if(recipientCandidates.length)recipient=recipientCandidates[0].entity;
+
+    // If an assign/give/schedule verb is present and a person is named, that person is a recipient.
+    if(!recipient && /\b(assign|give|schedule|delegate)\b/.test(text) && personEntries.length){
+      recipient=personEntries[0].entity;
+    }
+
+    // A named evaluator after "by" is an evaluator role.
+    const byPos=text.indexOf(' by ');
+    const evalAfterBy=evaluatorEntries.filter(x=>byPos>=0 && x.pos>byPos);
+    if(evalAfterBy.length)evaluator=evalAfterBy[0].entity;
+
+    // With two named people, "Amy evaluate Luis" => Amy evaluator, Luis recipient.
+    if(!evaluator && /\b(evaluate|evaluates|evaluating|assess|assesses|assessing)\b/.test(text) && evaluatorEntries.length){
+      const verbPos=Math.max(text.indexOf(' evaluate '),text.indexOf(' assesses '),text.indexOf(' assess '));
+      const before=evaluatorEntries.filter(x=>verbPos>=0 && x.pos<verbPos);
+      if(before.length)evaluator=before[before.length-1].entity;
+    }
+    if(!recipient && personEntries.length>1 && evaluator){
+      recipient=personEntries.find(x=>norm(x.entity.name)!==norm(evaluator.name||evaluator.username))?.entity||null;
+    }
+
+    // "Assign Luis M03 to Amy": Luis is first person, Amy evaluator if Amy is an evaluator user.
+    if(/\bassign\b/.test(text) && personEntries.length && evaluatorEntries.length){
+      const firstPerson=personEntries[0].entity;
+      const laterEvaluator=evaluatorEntries.find(x=>x.pos>personEntries[0].pos && norm(x.entity.name||x.entity.username)!==norm(firstPerson.name));
+      if(!recipient)recipient=firstPerson;
+      if(laterEvaluator && !evaluator)evaluator=laterEvaluator.entity;
+    }
+
+    // If only one person is named and wording is "... for NAME", it is clearly the recipient.
+    if(!recipient && personEntries.length===1 && (hasFor||hasTo))recipient=personEntries[0].entity;
+
+    // Actor defaults to signed-in user unless explicitly named before an action verb.
+    actor=currentUser||null;
+
+    // Task/subtask roles.
+    const subtask=subtaskHits[0]?.row||null;
+    let task=taskHits[0]?.row||null;
+    if(subtask && !task)task=activeTasks().find(t=>String(t.id)===String(subtask.taskId))||null;
+
+    return{
+      actor,
+      recipient,
+      evaluator,
+      task,
+      subtask,
+      recipientExplicit:!!recipient,
+      evaluatorExplicit:!!evaluator,
+      assignmentRelationship:!!recipient && (
+        /\b(assign|give|schedule|delegate)\b/.test(text) ||
+        /\b(create|add|make|new)\b/.test(text) && (hasFor||hasTo)
+      )
+    };
+  }
+
   function parse(q){
     const text=norm(q);
     const actions={};
@@ -167,35 +256,20 @@
     const objects={};
     Object.entries(OBJECT_PATTERNS).forEach(([k,re])=>objects[k]=re.test(text));
 
-    // Specific-object precedence: a subtask ID is never treated as a generic task.
     if(objects.subtask)objects.task=false;
-    // An explicit assignment phrase is distinct from a generic assessment.
     if(objects.assignment)objects.assessment=false;
-    // Matrix is more specific than readiness.
     if(objects.matrix)objects.readiness=false;
 
     const people=resolvePeople(q);
     const evaluators=resolveEvaluators(q);
     const tasks=resolveTasks(q);
     const subtasks=resolveSubtasks(q);
+    const roles=semanticRoles(q,people,evaluators,tasks,subtasks);
 
-    let person=people[0]?.row||null;
-    let evaluator=null;
-
-    // If two names occur, the earliest associate is the trainee; a later evaluator/auth-user is evaluator.
-    if(people.length>1){
-      person=people.slice().sort((a,b)=>a.pos-b.pos)[0].row;
-    }
-    const personPos=people.find(x=>x.row===person)?.pos??9999;
-    const evaluatorCandidates=evaluators.filter(x=>!person||norm(x.row.name||x.row.username)!==norm(person.name));
-    if(evaluatorCandidates.length){
-      const explicit=/\b(evaluator|evaluated by|evaluate by|by)\b/.test(text);
-      evaluator=(explicit?evaluatorCandidates:evaluatorCandidates.filter(x=>x.pos>personPos))[0]?.row||null;
-    }
-
-    // Named task may be implied by a subtask.
-    let subtask=subtasks[0]?.row||null;
-    let task=tasks[0]?.row||null;
+    let person=roles.recipient || people[0]?.row || null;
+    let evaluator=roles.evaluator || null;
+    let subtask=roles.subtask || subtasks[0]?.row || null;
+    let task=roles.task || tasks[0]?.row || null;
     if(subtask&&!task)task=activeTasks().find(t=>String(t.id)===String(subtask.taskId))||null;
 
     const self=/\b(my|mine|me|i|myself)\b/.test(text);
@@ -208,7 +282,7 @@
 
     return{
       raw:String(q||''),text,actions,objects,people,evaluators,tasks,subtasks,
-      person,evaluator,task,subtask,self,group,shift,overdue,history,advancement,evaluatorSelf,
+      person,evaluator,task,subtask,roles,self,group,shift,overdue,history,advancement,evaluatorSelf,
       dueDate:parseDatePhrase(q)
     };
   }
@@ -216,25 +290,35 @@
   // Registry-based scoring: no single regex chain decides everything.
   const INTENTS=[
     {
-      id:'assignment.create',family:'assignment',specificity:100,
+      id:'assignment.create',family:'assignment',specificity:120,
       score:p=>{
         let s=0;
-        if(p.actions.assign)s+=140;
-        if(p.objects.assignment)s+=110;
-        if(p.objects.assessment)s+=75;
-        if(p.objects.task||p.task)s+=55; // "assign task to Jose"
-        if(p.objects.subtask||p.subtask)s+=55;
-        if(p.person)s+=70;
-        if(p.evaluator)s+=25;
-        if(p.actions.create&&p.objects.assignment)s+=80;
-        if(p.actions.create&&p.objects.task&&!p.actions.assign)s-=150; // "create task" is not assignment
+
+        // Direct assignment verbs are strongest.
+        if(p.actions.assign)s+=180;
+        if(p.objects.assignment)s+=130;
+        if(p.objects.assessment)s+=95;
+
+        // "task for/to PERSON" is assignment/training work, not METL authoring.
+        if(p.roles?.assignmentRelationship)s+=220;
+        if((p.objects.task||p.task||p.objects.subtask||p.subtask) && p.roles?.recipientExplicit)s+=110;
+
+        if(p.person)s+=75;
+        if(p.evaluator)s+=35;
+        if(p.task||p.subtask)s+=60;
+        if(p.actions.create&&p.objects.assignment)s+=100;
+
+        // Pure METL authoring stays out of assignment if there is no recipient relationship.
+        if(p.actions.create&&p.objects.task&&!p.roles?.recipientExplicit&&!p.actions.assign)s-=220;
+        if(p.actions.create&&p.objects.subtask&&!p.roles?.recipientExplicit&&!p.actions.assign)s-=240;
+
         return s;
       }
     },
-    {id:'metl.subtask.create',family:'metl',specificity:100,score:p=>(p.actions.create&&p.objects.subtask?250:0)+(p.task?20:0)-(p.actions.assign?200:0)},
+    {id:'metl.subtask.create',family:'metl',specificity:105,score:p=>(p.actions.create&&p.objects.subtask&&!p.roles?.recipientExplicit?280:0)+(p.task?25:0)-(p.actions.assign?240:0)-(p.roles?.assignmentRelationship?260:0)},
     {id:'metl.subtask.edit',family:'metl',specificity:100,score:p=>(p.actions.edit&&p.objects.subtask?250:0)+(p.subtask?60:0)},
     {id:'metl.subtask.open',family:'metl',specificity:95,score:p=>(p.actions.open&&p.objects.subtask?210:0)+(p.subtask?70:0)},
-    {id:'metl.task.create',family:'metl',specificity:90,score:p=>(p.actions.create&&p.objects.task?230:0)-(p.actions.assign?220:0)},
+    {id:'metl.task.create',family:'metl',specificity:95,score:p=>(p.actions.create&&p.objects.task&&!p.roles?.recipientExplicit?270:0)-(p.actions.assign?250:0)-(p.roles?.assignmentRelationship?300:0)},
     {id:'metl.task.edit',family:'metl',specificity:90,score:p=>(p.actions.edit&&p.objects.task?220:0)+(p.task?60:0)},
     {id:'metl.task.open',family:'metl',specificity:85,score:p=>(p.actions.open&&p.objects.task?190:0)+(p.task?70:0)},
     {id:'person.create',family:'personnel',specificity:90,score:p=>(p.actions.create&&p.objects.personnel?220:0)},
@@ -302,6 +386,10 @@
     if(parsed.person)c.employeeNumber=parsed.person.employeeNumber;
     if(parsed.task)c.taskId=parsed.task.id;
     if(parsed.subtask)c.subtaskId=parsed.subtask.id;
+    if(parsed.evaluator)c.evaluatorUsername=parsed.evaluator.username;
+    if(!parsed.evaluator&&c.evaluatorUsername){
+      parsed.evaluator=(authUsers||[]).find(u=>String(u.username)===String(c.evaluatorUsername))||null;
+    }
     c.lastIntent=intent.id;
     saveContext(c);
     return parsed;
@@ -601,17 +689,29 @@
     let parsed=parse(q);
     let intent=classify(parsed);
     parsed=applyConversationContext(parsed,intent);
-
-    // Re-score once after context is injected so a follow-up like "assign him M03" works.
     intent=classify(parsed);
 
-    const html=render(parsed,intent);
+    // If top two intents are too close and represent different workflow families,
+    // Eagle asks rather than confidently performing the wrong action.
+    const top=intent.ranked[0],second=intent.ranked[1];
+    const ambiguous=top&&second&&top.family!==second.family&&top.score>0&&(top.score-second.score)<35;
+
+    let html;
+    if(ambiguous){
+      html=`<h3>I want to make sure I do the right thing.</h3>
+        <p>Your request could mean <b>${esc(top.id)}</b> or <b>${esc(second.id)}</b>.</p>
+        <p>Please say whether you want to <b>assign work to an associate</b> or <b>change the METL library</b>.</p>`;
+    }else{
+      html=render(parsed,intent);
+    }
+
     const engines=ENGINE_PLAN[intent.family]||ENGINE_PLAN.search;
     const result={
       html,
       intent:intent.id,
       family:intent.family,
       confidence:intent.score,
+      ambiguous,
       engines,
       parsed,
       ranked:intent.ranked.slice(0,5)
@@ -641,10 +741,89 @@
     }
   };
 
+  const SELF_TEST_CASES=[
+    ["Create new task","metl.task.create"],
+    ["Create a new METL task","metl.task.create"],
+    ["Add a task to the METL library","metl.task.create"],
+    ["Create new task for Luis","assignment.create"],
+    ["Create a task for Jose Esquivel","assignment.create"],
+    ["Give Luis a task","assignment.create"],
+    ["Schedule a task for Luis","assignment.create"],
+    ["Assign task to Jose Esquivel","assignment.create"],
+    ["Assign M03 to Jose","assignment.create"],
+    ["Assign Luis M03 to Amy","assignment.create"],
+    ["Assign an assessment to Luis","assignment.create"],
+    ["Create new assignment for Luis","assignment.create"],
+    ["Schedule assessment for Luis","assignment.create"],
+    ["Create new subtask","metl.subtask.create"],
+    ["Add a new subtask","metl.subtask.create"],
+    ["Create M03-09 subtask","metl.subtask.create"],
+    ["Edit task M03","metl.task.edit"],
+    ["Update M03 task","metl.task.edit"],
+    ["Open task M03","metl.task.open"],
+    ["Show M03 task","metl.task.open"],
+    ["Edit M03-09 subtask","metl.subtask.edit"],
+    ["Open M03-09 subtask","metl.subtask.open"],
+    ["Start assessment for Luis","assessment.start"],
+    ["Conduct assessment for Jose","assessment.start"],
+    ["Do an evaluation for Luis on M03","assessment.start"],
+    ["Show my assessment history","assessment.history"],
+    ["Show Luis assessment history","assessment.history"],
+    ["What do I need to advance","development.advancement"],
+    ["What is Luis missing","development.advancement"],
+    ["Show Luis readiness","readiness.person"],
+    ["Show C Shift readiness","readiness.group"],
+    ["Show plant readiness","readiness.group"],
+    ["Show overdue corrective actions","corrective.list"],
+    ["Show Luis corrective actions","corrective.list"],
+    ["Show critical gates","critical.list"],
+    ["Who can evaluate M03","evaluator.authority"],
+    ["Who is authorized to evaluate M03","evaluator.authority"],
+    ["Who is qualified for M03","qualification.people"],
+    ["Who can perform M03-09 independently","qualification.people"],
+    ["Explain M03","metl.task.info"],
+    ["Explain M03-09","metl.subtask.info"],
+    ["Open backup","system.backup"],
+    ["Open Backup & Restore","system.backup"],
+    ["Show notifications","system.notifications"],
+    ["Open audit trail","system.audit"],
+    ["Open departments","admin.departments"],
+    ["Open user accounts","admin.users"],
+    ["Open my profile","system.profile"],
+    ["Go to dashboard","system.dashboard"],
+    ["Open readiness matrix","system.matrix"],
+    ["Open enterprise tools","system.enterprise"],
+    ["Add new employee","person.create"],
+    ["Create new associate","person.create"],
+    ["Edit employee Luis","person.edit"],
+    ["Open personnel","system.personnel"],
+    ["Show Jose Esquivel","person.summary"],
+    ["Show assigned assessments","assignment.list"],
+    ["Show my assigned assessments","assignment.mine"],
+    ["What do I need to evaluate","assignment.evaluator"],
+    ["Show overdue assignments","assignment.overdue"]
+  ];
+
+  function runSelfTest(){
+    const details=SELF_TEST_CASES.map(([text,expected])=>{
+      const parsed=parse(text);
+      const actual=classify(parsed).id;
+      return{text,expected,actual,pass:actual===expected};
+    });
+    return{
+      version:VERSION,
+      total:details.length,
+      passed:details.filter(x=>x.pass).length,
+      failed:details.filter(x=>!x.pass),
+      details
+    };
+  }
+
   window.EagleOrchestrator={
     version:VERSION,
     parse,
     classifyText(text){const p=parse(text);return classify(p)},
+    runSelfTest,
     answer,
     intentCatalog:INTENTS.map(x=>({id:x.id,family:x.family,specificity:x.specificity})),
     engineCoverage(){
