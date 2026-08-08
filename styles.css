@@ -303,3 +303,61 @@ html,body{max-width:100%;overflow-x:hidden}
   .section-heading{align-items:stretch}
   .section-heading button{width:100%}
 }
+
+
+/* v9.10.1 assessment flow */
+.assessment-session-summary{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  margin-bottom:12px;
+}
+.assessment-session-summary div{
+  min-width:0;
+  padding:10px;
+  border-radius:12px;
+  background:var(--soft);
+}
+.assessment-session-summary small,
+.assessment-progress-copy small{
+  display:block;
+  color:var(--muted);
+  margin-bottom:3px;
+}
+.assessment-session-summary b{
+  display:block;
+  overflow-wrap:anywhere;
+}
+.assessment-progress-bar{
+  position:sticky;
+  top:72px;
+  z-index:30;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px 14px;
+  margin:10px 0 16px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:var(--card);
+  box-shadow:var(--shadow);
+}
+.assessment-progress-copy{min-width:0}
+.assessment-progress-copy strong{display:block;font-size:.98rem}
+#saveAssessmentTop{white-space:nowrap}
+.assessment-bottom-actions{
+  display:grid;
+  gap:10px;
+  margin:18px 0 28px;
+}
+.assessment-bottom-actions button{width:100%}
+@media(max-width:600px){
+  .assessment-session-summary{grid-template-columns:1fr}
+  .assessment-progress-bar{
+    top:66px;
+    flex-direction:column;
+    align-items:stretch;
+  }
+  #saveAssessmentTop{width:100%}
+}

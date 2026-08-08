@@ -1,4 +1,4 @@
-const CACHE='rp-v9.10.0-assessment-permissions-backup';
+const CACHE='rp-v9.10.1-assessment-flow-fix';
 const ASSETS=[
   './',
   './index.html',

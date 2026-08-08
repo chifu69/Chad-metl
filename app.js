@@ -363,7 +363,126 @@ function assess(){
   refreshTaskList();
   updateAssessmentStart();
 }
-function drawAssessment(){const emp=$('#aPerson').value,tid=$('#aTask').value;if(!emp||!tid)return $('#evalSubs').innerHTML='';const p=state.personnel.find(x=>x.employeeNumber===emp),t=state.tasks.find(x=>x.id===tid);if(levelRank[t.requiredLevel]>levelRank[currentUser.maxLevel||'-40'])return $('#evalSubs').innerHTML='<div class="card bad">Evaluator is not authorized for this qualification level.</div>';const subs=state.subtasks.filter(s=>s.taskId===tid&&s.status==='Active'&&levelRank[s.requiredLevel]<=levelRank[p.assignedLevel]);$('#evalSubs').innerHTML=`<h3>${subs.length} applicable subtasks</h3>${subs.map(s=>`<div class="subtask-eval ${s.criticality==='Critical Gate'?'critical-box':''}" data-sub="${s.id}"><div class="page-head"><div><h4>${s.id}</h4><p>${esc(s.name)}</p></div>${s.criticality==='Critical Gate'?'<span class="pill critical">Critical Gate</span>':''}</div><p><b>Standard:</b> ${esc(s.standard)}</p><p><b>Required evidence:</b> ${esc(s.evidence)}</p><div class="form-grid"><label>Rating<select class="r"><option>NOT EVALUATED</option><option>GO</option><option>NO-GO</option><option>REQUIRES ASSISTANCE</option><option>SUSPENDED</option></select></label><label>Evidence reference<input class="ev" placeholder="Photo, document, test, observation"></label><label class="full">Evaluator observations<textarea class="obs"></textarea></label>${s.srLeadVerification?'<label>Sr. Lead verification<select class="verify"><option value="">Pending</option><option>Verified</option><option>Not Verified</option></select></label>':''}</div></div>`).join('')}<div class="card form-grid"><label>Retraining required<select id="aRetrain"><option>No</option><option>Yes</option></select></label><label>Reassessment date<input id="aReDate" type="date"></label><label class="full">Corrective action summary<textarea id="aCorrective"></textarea></label></div><button class="primary" id="submitAssessment">Sign and submit assessment</button>`;$('#submitAssessment').onclick=submitAssessment}
+function drawAssessment(){
+  const emp=$('#aPerson').value,tid=$('#aTask').value;
+  if(!emp||!tid)return $('#evalSubs').innerHTML='';
+
+  const p=state.personnel.find(x=>x.employeeNumber===emp),
+        t=state.tasks.find(x=>x.id===tid);
+
+  if(levelRank[t.requiredLevel]>levelRank[currentUser.maxLevel||'-40']){
+    return $('#evalSubs').innerHTML='<div class="card bad">Evaluator is not authorized for this qualification level.</div>';
+  }
+
+  const subs=state.subtasks.filter(
+    s=>s.taskId===tid&&s.status==='Active'&&levelRank[s.requiredLevel]<=levelRank[p.assignedLevel]
+  );
+
+  $('#evalSubs').innerHTML=`
+    <div class="assessment-session-summary card">
+      <div><small>Associate</small><b>${esc(p.name)} · #${esc(p.employeeNumber)}</b></div>
+      <div><small>METL task</small><b>${esc(t.id)} — ${esc(t.name)}</b></div>
+    </div>
+
+    <div class="assessment-progress-bar" id="assessmentProgressBar">
+      <div class="assessment-progress-copy">
+        <strong id="assessmentProgressText">0 of ${subs.length} evaluated</strong>
+        <small>Rate the applicable subtasks, then save the assessment.</small>
+      </div>
+      <button class="primary" id="saveAssessmentTop" type="button">Save Assessment</button>
+    </div>
+
+    <h3>${subs.length} applicable subtasks</h3>
+
+    ${subs.map((s,i)=>`
+      <div class="subtask-eval ${s.criticality==='Critical Gate'?'critical-box':''}" data-sub="${s.id}">
+        <div class="page-head">
+          <div>
+            <small>Subtask ${i+1} of ${subs.length}</small>
+            <h4>${s.id}</h4>
+            <p>${esc(s.name)}</p>
+          </div>
+          ${s.criticality==='Critical Gate'?'<span class="pill critical">Critical Gate</span>':''}
+        </div>
+
+        <p><b>Standard:</b> ${esc(s.standard)}</p>
+        <p><b>Required evidence:</b> ${esc(s.evidence)}</p>
+
+        <div class="form-grid">
+          <label>Rating
+            <select class="r">
+              <option>NOT EVALUATED</option>
+              <option>GO</option>
+              <option>NO-GO</option>
+              <option>REQUIRES ASSISTANCE</option>
+              <option>SUSPENDED</option>
+            </select>
+          </label>
+
+          <label>Evidence reference
+            <input class="ev" placeholder="Photo, document, test, observation">
+          </label>
+
+          <label class="full">Evaluator observations
+            <textarea class="obs"></textarea>
+          </label>
+
+          ${s.srLeadVerification?`
+            <label>Sr. Lead verification
+              <select class="verify">
+                <option value="">Pending</option>
+                <option>Verified</option>
+                <option>Not Verified</option>
+              </select>
+            </label>`:''}
+        </div>
+      </div>
+    `).join('')}
+
+    <div class="card form-grid">
+      <label>Retraining required
+        <select id="aRetrain"><option>No</option><option>Yes</option></select>
+      </label>
+      <label>Reassessment date
+        <input id="aReDate" type="date">
+      </label>
+      <label class="full">Corrective action summary
+        <textarea id="aCorrective"></textarea>
+      </label>
+    </div>
+
+    <div class="assessment-bottom-actions">
+      <button class="primary" id="saveAssessmentBottom" type="button">Save Assessment</button>
+      <button class="secondary" id="cancelAssessment" type="button">Cancel Assessment</button>
+    </div>
+  `;
+
+  const updateAssessmentProgress=()=>{
+    const ratingControls=$$('.subtask-eval .r');
+    const evaluated=ratingControls.filter(s=>String(s.value||'').toUpperCase()!=='NOT EVALUATED').length;
+    const el=$('#assessmentProgressText');
+    if(el)el.textContent=`${evaluated} of ${ratingControls.length} evaluated`;
+  };
+
+  $$('.subtask-eval .r').forEach(s=>s.addEventListener('change',updateAssessmentProgress));
+
+  const saveNow=()=>{
+    updateAssessmentProgress();
+    submitAssessment();
+  };
+
+  $('#saveAssessmentTop').onclick=saveNow;
+  $('#saveAssessmentBottom').onclick=saveNow;
+  $('#cancelAssessment').onclick=()=>{
+    if(confirm('Cancel this assessment? Unsaved ratings and notes will be cleared.')){
+      $('#evalSubs').innerHTML='';
+      $('#startAssessment').scrollIntoView({behavior:'smooth',block:'center'});
+    }
+  };
+
+  updateAssessmentProgress();
+}
+
 function submitAssessment(){const emp=$('#aPerson').value,tid=$('#aTask').value,p=state.personnel.find(x=>x.employeeNumber===emp),t=state.tasks.find(x=>x.id===tid),sid=uid('ASMT');const rows=$$('.subtask-eval').map(box=>{const s=state.subtasks.find(x=>x.id===box.dataset.sub);return{subtaskId:s.id,subtaskName:s.name,criticality:s.criticality,requiredLevel:s.requiredLevel,result:box.querySelector('.r').value,evidenceReference:box.querySelector('.ev').value,observation:box.querySelector('.obs').value,srLeadVerification:box.querySelector('.verify')?.value||''}});if(rows.every(r=>r.result==='NOT EVALUATED'))return toast('Evaluate at least one subtask');const criticalFail=rows.some(r=>r.criticality==='Critical Gate'&&r.result!=='GO'&&r.result!=='NOT EVALUATED');const noGo=rows.some(r=>r.result==='NO-GO'),assist=rows.some(r=>r.result==='REQUIRES ASSISTANCE');const finalStatus=criticalFail?'UNQUALIFIED — CRITICAL GATE':noGo?'UNQUALIFIED':assist?'REQUIRES ASSISTANCE':'RECORDED';const session={id:sid,employeeNumber:emp,associateName:p.name,shift:p.shift,role:p.role,assignedLevel:p.assignedLevel,taskId:tid,taskName:t.name,taskRevision:t.revision,date:$('#aDate').value,evaluatorName:currentUser.name,evaluatorUsername:currentUser.username,method:$('#aMethod').value,status:'Closed',location:$('#aLine').value,notes:$('#aNotes').value,finalStatus,retrainingRequired:$('#aRetrain').value,reassessmentDate:$('#aReDate').value,correctiveAction:$('#aCorrective').value,signature:`${currentUser.name} · ${new Date().toLocaleString()}`};state.sessions.push(session);for(const r of rows){state.results.push({sessionId:sid,employeeNumber:emp,associateName:p.name,shift:p.shift,role:p.role,taskId:tid,taskName:t.name,date:session.date,evaluatorName:currentUser.name,...r,recordStatus:'Historical'});if(['NO-GO','SUSPENDED'].includes(r.result)||(r.criticality==='Critical Gate'&&r.result==='REQUIRES ASSISTANCE')){const due=$('#aReDate').value||new Date(Date.now()+state.settings.defaultCorrectiveActionDays*86400000).toISOString().slice(0,10);state.actions.push({id:uid('CA'),employeeNumber:emp,employee:p.name,shift:p.shift,taskId:tid,subtaskId:r.subtaskId,standardNotMet:r.observation||r.subtaskName,immediateCoaching:'',requiredRetraining:$('#aCorrective').value||'Targeted retraining required',responsibleTrainer:currentUser.name,targetDate:due,reassessmentDate:$('#aReDate').value,reassessmentResult:'',status:'Open',criticality:r.criticality,created:new Date().toISOString(),createdBy:currentUser.name})}}audit('SUBMIT','Assessment',sid,`${p.name} / ${tid} / ${finalStatus}`,null,session);toast(criticalFail?'Saved — Critical Gate blocks qualification':'Assessment saved and signed');sessionHistory()}
 function sessionTable(rows){return`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Associate</th><th>Task</th><th>Evaluator</th><th>Method</th><th>Final status</th><th></th></tr></thead><tbody>${rows.map(s=>`<tr><td>${esc(s.date)}</td><td>${esc(s.associateName)}</td><td>${s.taskId} — ${esc(s.taskName)}</td><td>${esc(s.evaluatorName)}</td><td>${esc(s.method)}</td><td><span class="pill ${String(s.finalStatus).includes('CRITICAL')?'critical':String(s.finalStatus).includes('UNQUALIFIED')?'nogo':'go'}">${esc(s.finalStatus||s.status)}</span></td><td><button class="secondary sv" data-id="${s.id}">View</button></td></tr>`).join('')||'<tr><td colspan="7">No assessment sessions.</td></tr>'}</tbody></table></div>`}
 function sessionHistory(){const rows=[...state.sessions].sort((a,b)=>(b.date||'').localeCompare(a.date||''));page('Assessment History','Signed sessions remain preserved; reassessments are separate records',`<div class="filters"><input id="hSearch" placeholder="Search associate, task, evaluator"><select id="hResult"><option value="">All results</option><option>UNQUALIFIED</option><option>CRITICAL</option><option>RECORDED</option></select></div><div id="hTable"></div>`,'<button class="secondary" id="exportAssess">Export assessments CSV</button>');const draw=()=>{const q=$('#hSearch').value.toLowerCase(),r=$('#hResult').value;const f=rows.filter(s=>(s.associateName+' '+s.taskId+' '+s.taskName+' '+s.evaluatorName).toLowerCase().includes(q)&&(!r||String(s.finalStatus).includes(r)));$('#hTable').innerHTML=sessionTable(f);$$('.sv').forEach(b=>b.onclick=()=>sessionDetail(b.dataset.id))};$('#hSearch').oninput=draw;$('#hResult').oninput=draw;draw();$('#exportAssess').onclick=exportAssessments}
@@ -995,7 +1114,7 @@ function exportAssessments(){
 function restoreBackup(e){const f=e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const obj=JSON.parse(reader.result);state=normalize(obj);audit('RESTORE','System','backup','JSON backup restored');toast('Backup restored');dashboard()}catch{toast('Invalid backup file')}};reader.readAsText(f)}
 function modal(html){document.body.insertAdjacentHTML('beforeend',`<div class="modal"><div class="modal-card">${html}</div></div>`);$$('.close').forEach(b=>b.onclick=closeModal)} function closeModal(){$('.modal')?.remove()}
 $('#langEn').onclick=()=>applyLanguage('en');$('#langEs').onclick=()=>applyLanguage('es');if($('#languageMenuBtn'))$('#languageMenuBtn').onclick=()=>{const menu=$('#languageMenu');const opening=menu.classList.contains('hidden');menu.classList.toggle('hidden');$('#languageMenuBtn').setAttribute('aria-expanded',opening?'true':'false')};document.addEventListener('click',e=>{const wrap=e.target.closest?.('.login-language');if(!wrap){$('#languageMenu')?.classList.add('hidden');$('#languageMenuBtn')?.setAttribute('aria-expanded','false')}});applyLanguage(uiLanguage,false);$('#loginBtn').onclick=login;$('#pin').onkeydown=e=>{if(e.key==='Enter')login()};$('#changePasswordBtn').onclick=changePassword;$('#profileBtn').onclick=()=>navigate('profile');$('#serverConfigBtn').onclick=()=>window.RpiaServerSetup.open();$('#logoutBtn').onclick=logout;$('#menuBtn').onclick=()=>{$('#nav').classList.toggle('open');$('#navScrim').classList.toggle('open')};$('#navScrim').onclick=()=>{$('#nav').classList.remove('open');$('#navScrim').classList.remove('open')};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=9.10.0').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=9.10.1').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});
 
 /* RP v6.1 — core compliance implementation overrides */
 function matrixView(){
