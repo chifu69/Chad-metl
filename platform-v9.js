@@ -1,7 +1,7 @@
 /* RP Enterprise Platform v8.0 — architecture and experience layer */
 (function(){
   'use strict';
-  const VERSION='9.12.4';
+  const VERSION='9.13.0';
   const $q=(s,r=document)=>r.querySelector(s);
   const $$q=(s,r=document)=>[...r.querySelectorAll(s)];
   const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
@@ -350,58 +350,7 @@
   };
 
 
-  function eagleAssignmentIntent(q){
-    const s=String(q||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
-    const hasAssign=/\b(assign|assigned|schedule|set up|setup|give)\b/.test(s);
-    const hasAssessment=/\b(assessment|assess|evaluation|evaluate|training)\b/.test(s);
-    return hasAssign&&hasAssessment;
-  }
-
-
-  /* v9.12.2 Ask Eagle: recognize assignment requests and route to the real workflow. */
-  document.addEventListener('click',function(ev){
-    const btn=ev.target.closest('#eagleAskBtn, #askEagleBtn, .ask-eagle-btn, [data-action="ask-eagle"], button');
-    if(!btn)return;
-
-    const label=(btn.textContent||'').trim().toLowerCase();
-    const isAsk=label==='ask'||btn.id==='eagleAskBtn'||btn.id==='askEagleBtn'||btn.classList.contains('ask-eagle-btn');
-    if(!isAsk)return;
-
-    const panel=btn.closest('.eagle-panel, .ask-eagle, .chat-panel, .modal, #main')||document;
-    const input=panel.querySelector('input[type="text"], input[type="search"], textarea');
-    if(!input||!eagleAssignmentIntent(input.value))return;
-
-    ev.preventDefault();
-    ev.stopImmediatePropagation();
-
-    if(currentUser?.role==='admin'){
-      closeModal?.();
-      createAssessmentAssignment();
-    }else{
-      const response=panel.querySelector('.eagle-answer, .answer, .chat-answer, [data-eagle-answer]');
-      if(response){
-        response.innerHTML='Assigned assessments are managed from <b>Assigned Assessments</b>. You do not have permission to create assignments.';
-      }else{
-        toast('Open Assigned Assessments to review assigned work');
-      }
-    }
-  },true);
-
-  document.addEventListener('keydown',function(ev){
-    if(ev.key!=='Enter')return;
-    const input=ev.target;
-    if(!(input instanceof HTMLInputElement||input instanceof HTMLTextAreaElement))return;
-    if(!eagleAssignmentIntent(input.value))return;
-
-    const panel=input.closest('.eagle-panel, .ask-eagle, .chat-panel, .modal, #main');
-    if(!panel)return;
-    const askBtn=[...panel.querySelectorAll('button')].find(b=>(b.textContent||'').trim().toLowerCase()==='ask');
-    if(askBtn){
-      ev.preventDefault();
-      askBtn.click();
-    }
-  },true);
-
+  /* Eagle routing is centralized in eagle-controller.js (v9.13.0). */
 
   /* Replace navigation with user modules only; engines stay invisible. */
   window.navDefs=[
@@ -421,7 +370,7 @@
   ];
   window.renderNav=function(){
     const allowed=window.navDefs.filter(x=>{if(['settings','enterprise'].includes(x[0]))return currentUser.role==='admin';if(x[0]==='audit')return currentUser.role==='admin'||currentUser.role==='evaluator';return true});
-    $q('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}<small>v9.12.4</small></div>`;
+    $q('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}<small>v9.13.0</small></div>`;
     $$q('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view));
   };
   window.navigate=function(v){

@@ -597,3 +597,12 @@ html,body{max-width:100%;overflow-x:hidden}
     86%{filter:brightness(1.2);text-shadow:0 0 7px rgba(255,255,255,.45)}
   }
 }
+
+
+/* v9.13.0 Eagle Operational Brain */
+.eagle-result-card{display:grid;gap:6px;margin:8px 0;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--soft)}
+.eagle-result-card small{color:var(--muted);line-height:1.35}
+.eagle-result-card button{margin-top:4px}
+.eagle-mini-list{display:grid;gap:6px;margin:10px 0}
+.eagle-mini-list>div{display:grid;gap:2px;padding:9px 10px;border-radius:10px;background:var(--soft)}
+.eagle-mini-list span{color:var(--muted);font-size:.86rem}

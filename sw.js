@@ -1,5 +1,6 @@
-const CACHE='rp-v9.12.4-header-motto-visible-animation';
+const CACHE='rp-v9.13.0-eagle-operational-brain';
 const ASSETS=[
+  './eagle-controller.js',
   './',
   './index.html',
   './styles.css',
