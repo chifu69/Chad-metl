@@ -606,3 +606,11 @@ html,body{max-width:100%;overflow-x:hidden}
 .eagle-mini-list{display:grid;gap:6px;margin:10px 0}
 .eagle-mini-list>div{display:grid;gap:2px;padding:9px 10px;border-radius:10px;background:var(--soft)}
 .eagle-mini-list span{color:var(--muted);font-size:.86rem}
+
+
+/* v9.20.0 Eagle brain */
+.eagle-result-card{display:grid;gap:6px;margin:8px 0;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--soft)}
+.eagle-result-card small{color:var(--muted);line-height:1.35}
+.eagle-mini-list{display:grid;gap:6px;margin:10px 0}
+.eagle-mini-list>div{display:grid;gap:2px;padding:9px 10px;border-radius:10px;background:var(--soft)}
+.eagle-mini-list span{color:var(--muted);font-size:.86rem}

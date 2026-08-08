@@ -1,4 +1,4 @@
-const CACHE='rp-v9.13.1-eagle-classification-overhaul';
+const CACHE='rp-v9.20.0-eagle-brain-rebuild';
 const ASSETS=[
   './eagle-controller.js',
   './',
