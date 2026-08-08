@@ -1,11 +1,11 @@
-/* RP Eagle Operational Brain v9.13.0
+/* RP Eagle Operational Brain v9.13.1
    Role-aware orchestration across the RP application.
    Eagle routes to existing workflows and never bypasses RP permissions.
 */
 (function(){
   'use strict';
 
-  const VERSION='9.13.0';
+  const VERSION='9.13.1';
   const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[’‘]/g,"'").replace(/[^a-zA-Z0-9#\-]+/g,' ').toLowerCase().replace(/\s+/g,' ').trim();
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const todayISO=()=>new Date().toISOString().slice(0,10);
@@ -79,37 +79,121 @@
     return best;
   }
 
-  function classify(q){
+  function parseCommand(q){
     const s=norm(q);
-    if(/\b(assign|schedule|create|new|give|set up|setup)\b/.test(s)&&/\b(assessment|evaluation|training|assignment)\b/.test(s))return'assign_create';
-    if(/\b(add|create|new)\b/.test(s)&&/\b(employee|associate|personnel|worker)\b/.test(s))return'person_create';
-    if(/\b(add|create|new)\b/.test(s)&&/\b(metl|task|subtask)\b/.test(s))return'task_create';
-    if(/\b(assigned to me|need to evaluate|waiting for me|my evaluations|my assessments to evaluate)\b/.test(s))return'assign_evaluator';
-    if(/\b(my|mine|me)\b/.test(s)&&/\b(assigned|assignment|assessment|evaluation)\b/.test(s))return'assign_my';
-    if(/\b(overdue|late|past due)\b/.test(s)&&/\b(assign|assessment|evaluation)\b/.test(s))return'assign_overdue';
-    if(/\b(assign|assigned|assignment)\b/.test(s))return'assign_list';
-    if(/\b(start|conduct|perform|do|open)\b/.test(s)&&/\b(assessment|evaluation)\b/.test(s))return'assessment_start';
-    if(/\b(assessment history|evaluation history|past assessments|previous assessments|history)\b/.test(s))return'assessment_history';
-    if(/\b(advance|advancement|promotion|next level|move up|improve|what do i need|what am i missing|gap|gaps)\b/.test(s))return'advancement';
-    if(/\b(readiness|ready|preparation)\b/.test(s)&&/\b(shift|a shift|b shift|c shift|d shift|department|plant|overall)\b/.test(s))return'readiness_group';
-    if(/\b(readiness|ready|preparation)\b/.test(s))return'readiness_person';
-    if(/\b(critical gate|critical gates|critical failure|safety gate)\b/.test(s))return'critical';
-    if(/\b(corrective|corrective action|corrective actions|reassessment|reassessments|overdue action|open action)\b/.test(s))return'corrective';
-    if(/\b(who can evaluate|who is authorized to evaluate|which evaluator|authorized evaluator)\b/.test(s))return'evaluator_authority';
-    if(/\b(who can|qualified|qualification|independent|independently|authorized to perform)\b/.test(s))return'qualified';
-    if(/\b(how do|how to|procedure|instruction|instructions|standard work|approved procedure|knowledge|wiki)\b/.test(s))return'knowledge';
-    if(/\b(task|subtask|metl)\b/.test(s))return'task_info';
-    if(/\b(backup|restore|data integrity)\b/.test(s))return'backup';
-    if(/\b(notification|notifications|alerts)\b/.test(s))return'notifications';
-    if(/\b(audit|audit trail|history of changes|who changed)\b/.test(s))return'audit';
-    if(/\b(department|departments)\b/.test(s))return'departments';
-    if(/\b(user|users|account|accounts|password|permissions|permission|role|roles)\b/.test(s))return'user_admin';
-    if(/\b(profile|my profile)\b/.test(s))return'profile';
-    if(/\b(dashboard|home)\b/.test(s))return'dashboard';
-    if(/\b(personnel|employees|associates|people)\b/.test(s))return'personnel';
-    if(/\b(matrix|readiness matrix)\b/.test(s))return'matrix';
-    if(/\b(engine|engines|diagnostic|enterprise)\b/.test(s))return'enterprise';
-    if(resolvePerson(q,{useSelf:false}))return'person';
+    const words=s.split(' ').filter(Boolean);
+
+    const action={
+      create:/\b(create|add|new|make|build|schedule|assign|give|set up|setup)\b/.test(s),
+      assign:/\b(assign|assigned|assignment|schedule|give)\b/.test(s),
+      start:/\b(start|begin|conduct|perform|do|launch)\b/.test(s),
+      open:/\b(open|show|view|go to|take me|display|see)\b/.test(s),
+      edit:/\b(edit|change|update|modify|revise|correct)\b/.test(s),
+      close:/\b(close|complete|finish|resolve)\b/.test(s),
+      cancel:/\b(cancel|remove assignment|unassign)\b/.test(s),
+      find:/\b(find|search|look for|locate|who|which)\b/.test(s),
+      explain:/\b(explain|what is|what are|tell me about|how does)\b/.test(s),
+      list:/\b(list|all|show|view|open|what|which|who)\b/.test(s)
+    };
+
+    // Object detection is intentionally specific-first.
+    let object='general';
+    if(/\b(subtask|subtasks)\b/.test(s)||/\bm\d{2}[- ]\d{2}\b/.test(s)) object='subtask';
+    else if(/\b(metl task|metl tasks)\b/.test(s)||(/\btask\b/.test(s)&&!/\bassessment task\b/.test(s))) object='task';
+    else if(/\b(assigned assessment|assigned assessments|assessment assignment|assessment assignments|assignment|assignments)\b/.test(s)) object='assignment';
+    else if(/\b(assessment|assessments|evaluation|evaluations)\b/.test(s)) object='assessment';
+    else if(/\b(corrective action|corrective actions|corrective|reassessment|reassessments)\b/.test(s)) object='corrective';
+    else if(/\b(critical gate|critical gates|critical failure|safety gate)\b/.test(s)) object='critical';
+    else if(/\b(readiness matrix|matrix)\b/.test(s)) object='matrix';
+    else if(/\b(readiness|ready|preparation)\b/.test(s)) object='readiness';
+    else if(/\b(qualification|qualified|independent authorization|independently|authorized to perform)\b/.test(s)) object='qualification';
+    else if(/\b(evaluator|evaluators|evaluate)\b/.test(s)) object='evaluator';
+    else if(/\b(employee|employees|associate|associates|personnel|worker|workers|people)\b/.test(s)) object='personnel';
+    else if(/\b(knowledge|procedure|procedures|instruction|instructions|standard work|approved procedure|wiki)\b/.test(s)) object='knowledge';
+    else if(/\b(backup|restore|data integrity)\b/.test(s)) object='backup';
+    else if(/\b(notification|notifications|alert|alerts)\b/.test(s)) object='notifications';
+    else if(/\b(audit|audit trail|history of changes|who changed)\b/.test(s)) object='audit';
+    else if(/\b(department|departments)\b/.test(s)) object='department';
+    else if(/\b(user|users|account|accounts|password|permissions|permission|role|roles)\b/.test(s)) object='user';
+    else if(/\b(profile|my profile)\b/.test(s)) object='profile';
+    else if(/\b(dashboard|home)\b/.test(s)) object='dashboard';
+    else if(/\b(engine|engines|diagnostic|enterprise)\b/.test(s)) object='enterprise';
+
+    const scope={
+      self:/\b(my|mine|me|i|myself)\b/.test(s),
+      evaluatorSelf:/\b(assigned to me|need to evaluate|waiting for me|my evaluations|my assessments to evaluate|what do i need to evaluate)\b/.test(s),
+      overdue:/\b(overdue|late|past due)\b/.test(s),
+      history:/\b(history|past|previous|completed)\b/.test(s),
+      advancement:/\b(advance|advancement|promotion|next level|move up|improve|what do i need|what am i missing|gap|gaps)\b/.test(s),
+      group:/\b(shift|department|plant|overall|all shifts)\b/.test(s)
+    };
+
+    return{s,words,action,object,scope};
+  }
+
+  function classify(q){
+    const p=parseCommand(q),s=p.s,a=p.action,o=p.object,x=p.scope;
+
+    // 1. High-confidence workflow commands: action + exact object.
+    if(o==='assignment' && (a.create||a.assign)) return'assign_create';
+    if(o==='assessment' && a.assign) return'assign_create';
+    if(o==='assessment' && a.start) return'assessment_start';
+
+    // METL authoring: distinguish task vs subtask BEFORE generic METL logic.
+    if(o==='subtask' && a.create) return'subtask_create';
+    if(o==='subtask' && a.edit) return'subtask_edit';
+    if(o==='subtask' && a.open) return'subtask_open';
+    if(o==='task' && a.create) return'task_create';
+    if(o==='task' && a.edit) return'task_edit';
+    if(o==='task' && a.open) return'task_open';
+
+    // Personnel authoring.
+    if(o==='personnel' && a.create) return'person_create';
+    if(o==='personnel' && a.edit) return'person_edit';
+
+    // 2. Assignment views/scopes.
+    if(x.evaluatorSelf && (o==='assessment'||o==='assignment'||o==='evaluator')) return'assign_evaluator';
+    if(x.overdue && (o==='assessment'||o==='assignment')) return'assign_overdue';
+    if(x.self && (o==='assessment'||o==='assignment')) return'assign_my';
+    if(o==='assignment') return'assign_list';
+
+    // 3. Assessment history/opening.
+    if(o==='assessment' && x.history) return'assessment_history';
+    if(o==='assessment' && (a.open||a.start)) return'assessment_start';
+
+    // 4. Development/readiness.
+    if(x.advancement) return'advancement';
+    if(o==='readiness' && x.group) return'readiness_group';
+    if(o==='readiness') return'readiness_person';
+
+    // 5. Corrective / safety.
+    if(o==='critical') return'critical';
+    if(o==='corrective') return'corrective';
+
+    // 6. Authority and qualification queries.
+    if(o==='evaluator' && /\b(who|which|authorized|can)\b/.test(s)) return'evaluator_authority';
+    if(o==='qualification'||/\b(who can perform|who is qualified|qualified for|can perform independently)\b/.test(s)) return'qualified';
+
+    // 7. Knowledge + METL information.
+    if(o==='knowledge') return'knowledge';
+    if(o==='subtask') return'subtask_info';
+    if(o==='task') return'task_info';
+
+    // 8. System modules.
+    if(o==='backup') return'backup';
+    if(o==='notifications') return'notifications';
+    if(o==='audit') return'audit';
+    if(o==='department') return'departments';
+    if(o==='user') return'user_admin';
+    if(o==='profile') return'profile';
+    if(o==='dashboard') return'dashboard';
+    if(o==='personnel') return'personnel';
+    if(o==='matrix') return'matrix';
+    if(o==='enterprise') return'enterprise';
+
+    // 9. Named-person fallback only after explicit objects were considered.
+    if(resolvePerson(q,{useSelf:false})) return'person';
+
     return'general';
   }
 
@@ -174,6 +258,62 @@
     const people=activePeople().filter(p=>{const latest=latestResults(p.employeeNumber);return req.length&&req.every(s=>latest.get(`${p.employeeNumber}|${s.id}`)?.result==='GO')});
     return `<h3>${esc(sub?`${sub.id} — ${sub.name}`:`${task.id} — ${task.name}`)}</h3><p>${people.length} associate${people.length===1?' is':'s are'} currently recorded GO for the applicable requirement${req.length===1?'':'s'}.</p>${people.slice(0,15).map(p=>`<button class="list-link eagle-person" data-emp="${esc(p.employeeNumber)}"><span><b>${esc(p.name)}</b><small>${esc(p.shift)} Shift · ${esc(p.assignedLevel)}</small></span></button>`).join('')||'<p>No matching qualified associates were found.</p>'}`;
   }
+  function subtaskInfo(q){
+    const sub=resolveSubtask(q);
+    if(!sub)return '<p>Tell me the subtask ID or name. Example: “Explain M03-09.”</p><button class="secondary eagle-nav" data-view="tasks">Open Subtask Library</button>';
+    return `<h3>${esc(sub.id)} — ${esc(sub.name)}</h3>
+      <p><b>Parent task:</b> ${esc(sub.taskId)} · <b>Required level:</b> ${esc(sub.requiredLevel)} · <b>Criticality:</b> ${esc(sub.criticality||'Supporting')}</p>
+      <p><b>Standard:</b> ${esc(sub.standard||'')}</p>
+      <p><b>Evidence:</b> ${esc(sub.evidence||'')}</p>
+      <div class="actions">
+        ${(typeof canManageMetl==='function'&&canManageMetl())?`<button class="primary eagle-edit-subtask" data-id="${esc(sub.id)}" data-task="${esc(sub.taskId)}">Edit subtask</button>`:''}
+        <button class="secondary eagle-nav" data-view="tasks">Open Subtask Library</button>
+      </div>`;
+  }
+
+  function openTaskForEdit(q){
+    if(!(typeof canManageMetl==='function'&&canManageMetl()))return toast('You are not authorized to modify METL tasks');
+    const task=resolveTask(q);
+    if(task)return taskEdit(task.id);
+    taskEdit();
+  }
+
+  function openSubtaskForCreate(q){
+    if(!(typeof canManageMetl==='function'&&canManageMetl()))return toast('You are not authorized to create subtasks');
+    const task=resolveTask(q);
+    subtaskEdit(task?.id||'');
+  }
+
+  function openSubtaskForEdit(q){
+    if(!(typeof canManageMetl==='function'&&canManageMetl()))return toast('You are not authorized to modify subtasks');
+    const sub=resolveSubtask(q);
+    if(sub)return subtaskEdit(sub.taskId,sub.id);
+    const task=resolveTask(q);
+    subtaskEdit(task?.id||'');
+  }
+
+  function openTaskDetailFromQuestion(q){
+    const task=resolveTask(q);
+    if(task)return taskDetail(task.id);
+    navigate('tasks');
+  }
+
+  function openSubtaskDetailFromQuestion(q){
+    const sub=resolveSubtask(q);
+    if(sub){
+      navigate('tasks');
+      setTimeout(()=>{
+        const subTab=document.querySelector('#subTab');
+        if(subTab)subTab.click();
+        const search=document.querySelector('#sSearchAll');
+        if(search){search.value=sub.id;search.dispatchEvent(new Event('input',{bubbles:true}))}
+      },80);
+      return;
+    }
+    navigate('tasks');
+    setTimeout(()=>document.querySelector('#subTab')?.click(),60);
+  }
+
   function taskInfo(q){
     const task=resolveTask(q),sub=resolveSubtask(q);
     if(sub)return `<h3>${esc(sub.id)} — ${esc(sub.name)}</h3><p><b>Task:</b> ${esc(sub.taskId)} · <b>Level:</b> ${esc(sub.requiredLevel)} · <b>Criticality:</b> ${esc(sub.criticality||'Supporting')}</p><p><b>Standard:</b> ${esc(sub.standard||'')}</p><p><b>Evidence:</b> ${esc(sub.evidence||'')}</p><button class="secondary eagle-nav" data-view="tasks">Open METL library</button>`;
@@ -226,12 +366,21 @@
     evaluator_authority:['Natural Language Engine','Permission Assurance Engine','Rules Engine'],
     qualified:['Natural Language Engine','Search Engine','Rules Engine','Coverage Resilience Engine'],
     knowledge:['Natural Language Engine','Knowledge Engine'],
+    task_create:['Natural Language Engine','Permission Assurance Engine','Workflow Engine','Audit Engine'],
+    task_edit:['Natural Language Engine','Permission Assurance Engine','Workflow Engine','Search Engine','Audit Engine'],
+    task_open:['Natural Language Engine','Search Engine','Workflow Engine'],
+    subtask_create:['Natural Language Engine','Permission Assurance Engine','Workflow Engine','Rules Engine','Audit Engine'],
+    subtask_edit:['Natural Language Engine','Permission Assurance Engine','Workflow Engine','Search Engine','Audit Engine'],
+    subtask_open:['Natural Language Engine','Search Engine','Workflow Engine'],
+    subtask_info:['Natural Language Engine','Search Engine','Knowledge Engine','Rules Engine'],
     task_info:['Natural Language Engine','Search Engine','Knowledge Engine','Rules Engine'],
     backup:['Natural Language Engine','Data Quality Engine','Audit Engine'],
     notifications:['Natural Language Engine','Workflow Engine'],
     audit:['Natural Language Engine','Audit Engine'],
     departments:['Natural Language Engine','Dependency & Impact Engine','Data Quality Engine'],
     user_admin:['Natural Language Engine','Permission Assurance Engine','Audit Engine'],
+    person_create:['Natural Language Engine','Permission Assurance Engine','Workflow Engine','Audit Engine'],
+    person_edit:['Natural Language Engine','Permission Assurance Engine','Workflow Engine','Search Engine','Audit Engine'],
     person:['Natural Language Engine','Search Engine','Rules Engine'],
     personnel:['Natural Language Engine','Search Engine'],
     matrix:['Natural Language Engine','Readiness Integrity Engine'],
@@ -258,9 +407,39 @@
       case'qualified':html=qualifiedAnswer(q);break;
       case'knowledge':html=knowledge(q);break;
       case'task_info':html=taskInfo(q);break;
+      case'subtask_info':html=subtaskInfo(q);break;
       case'person':html=personReadiness(person);break;
-      case'person_create':html=isAdmin()?'<p>I can open the Personnel workflow to add a new associate.</p><button class="primary eagle-add-person">Add personnel</button>':'<p>You do not have permission to add personnel.</p>';break;
-      case'task_create':html=(typeof canManageMetl==='function'&&canManageMetl())?'<p>I can open the METL library to create a task.</p><button class="primary eagle-add-task">Add METL task</button>':'<p>You do not have permission to create METL tasks.</p>';break;
+
+      case'person_create':
+        html=isAdmin()?'<p>I can open the Personnel workflow to add a new associate.</p><button class="primary eagle-add-person">Add personnel</button>':'<p>You do not have permission to add personnel.</p>';
+        break;
+      case'person_edit':
+        html=isAdmin()?`<p>${person?`I found <b>${esc(person.name)}</b>. `:''}I can open the Personnel editor.</p><button class="primary eagle-edit-person"${person?` data-emp="${esc(person.employeeNumber)}"`:''}>Edit personnel</button>`:'<p>You do not have permission to edit personnel.</p>';
+        break;
+
+      case'task_create':
+        html=(typeof canManageMetl==='function'&&canManageMetl())?'<p>I will open the METL task editor for a <b>new task</b>.</p><button class="primary eagle-create-task">Create METL task</button>':'<p>You do not have permission to create METL tasks.</p>';
+        break;
+      case'task_edit':
+        html=(typeof canManageMetl==='function'&&canManageMetl())?`<p>${task?`I found <b>${esc(task.id)} — ${esc(task.name)}</b>. `:''}I can open the METL task editor.</p><button class="primary eagle-edit-task">Edit METL task</button>`:'<p>You do not have permission to edit METL tasks.</p>';
+        break;
+      case'task_open':
+        html=task?`<p>I found <b>${esc(task.id)} — ${esc(task.name)}</b>.</p><button class="primary eagle-open-task">Open METL task</button>`:'<p>Tell me which METL task you want to open.</p><button class="secondary eagle-nav" data-view="tasks">Open METL Library</button>';
+        break;
+
+      case'subtask_create':
+        html=(typeof canManageMetl==='function'&&canManageMetl())?`<p>I will open the editor for a <b>new subtask</b>${task?` under <b>${esc(task.id)} — ${esc(task.name)}</b>`:''}.</p><button class="primary eagle-create-subtask">Create subtask</button>`:'<p>You do not have permission to create subtasks.</p>';
+        break;
+      case'subtask_edit':{
+        const sub=resolveSubtask(q);
+        html=(typeof canManageMetl==='function'&&canManageMetl())?`<p>${sub?`I found <b>${esc(sub.id)} — ${esc(sub.name)}</b>. `:''}I can open the subtask editor.</p><button class="primary eagle-edit-subtask-question">Edit subtask</button>`:'<p>You do not have permission to edit subtasks.</p>';
+        break;
+      }
+      case'subtask_open':{
+        const sub=resolveSubtask(q);
+        html=sub?`<p>I found <b>${esc(sub.id)} — ${esc(sub.name)}</b>.</p><button class="primary eagle-open-subtask">Open subtask</button>`:'<p>Tell me which subtask you want to open.</p><button class="secondary eagle-nav" data-view="tasks">Open Subtask Library</button>';
+        break;
+      }
       case'backup':html=isAdmin()?'<h3>Backup & Restore</h3><p>Open the protected backup area to create, verify, or restore a data package.</p><button class="primary eagle-nav" data-view="backup">Open Backup & Restore</button>':'<p>Backup & Restore is restricted to administrators.</p>';break;
       case'notifications':html='<p>I can open your current notifications and due work.</p><button class="primary eagle-nav" data-view="notifications">Open Notifications</button>';break;
       case'audit':html=(currentUser?.role==='admin'||currentUser?.role==='evaluator')?'<p>I can open the Audit Trail.</p><button class="primary eagle-nav" data-view="audit">Open Audit Trail</button>':'<p>Your account is not authorized to view the Audit Trail.</p>';break;
@@ -293,7 +472,16 @@
     container.querySelectorAll('.eagle-create-assignment').forEach(b=>b.onclick=()=>{closeAssistant();setTimeout(()=>openAssignmentPrefill(lastQuestion),40)});
     container.querySelectorAll('.eagle-start-assessment').forEach(b=>b.onclick=()=>{closeAssistant();setTimeout(()=>openAssessmentPrefill(lastQuestion),40)});
     container.querySelectorAll('.eagle-add-person').forEach(b=>b.onclick=()=>{closeAssistant();setTimeout(()=>personEdit(),40)});
-    container.querySelectorAll('.eagle-add-task').forEach(b=>b.onclick=()=>{closeAssistant();navigate('tasks');setTimeout(()=>document.querySelector('#addTask')?.click(),80)});
+    container.querySelectorAll('.eagle-edit-person').forEach(b=>b.onclick=()=>{const emp=b.dataset.emp;closeAssistant();setTimeout(()=>personEdit(emp||undefined),40)});
+
+    container.querySelectorAll('.eagle-create-task').forEach(b=>b.onclick=()=>{closeAssistant();setTimeout(()=>taskEdit(),40)});
+    container.querySelectorAll('.eagle-edit-task').forEach(b=>b.onclick=()=>{closeAssistant();setTimeout(()=>openTaskForEdit(lastQuestion),40)});
+    container.querySelectorAll('.eagle-open-task').forEach(b=>b.onclick=()=>{closeAssistant();setTimeout(()=>openTaskDetailFromQuestion(lastQuestion),40)});
+
+    container.querySelectorAll('.eagle-create-subtask').forEach(b=>b.onclick=()=>{closeAssistant();setTimeout(()=>openSubtaskForCreate(lastQuestion),40)});
+    container.querySelectorAll('.eagle-edit-subtask-question').forEach(b=>b.onclick=()=>{closeAssistant();setTimeout(()=>openSubtaskForEdit(lastQuestion),40)});
+    container.querySelectorAll('.eagle-edit-subtask').forEach(b=>b.onclick=()=>{const task=b.dataset.task,id=b.dataset.id;closeAssistant();setTimeout(()=>subtaskEdit(task,id),40)});
+    container.querySelectorAll('.eagle-open-subtask').forEach(b=>b.onclick=()=>{closeAssistant();setTimeout(()=>openSubtaskDetailFromQuestion(lastQuestion),40)});
   }
 
   window.RPBrainLegacy=window.RPBrainEnterprise;
@@ -312,7 +500,7 @@
   };
 
   window.EagleOrchestrator={
-    version:VERSION,classify,resolvePerson,resolveTask,resolveSubtask,resolveEvaluator,answer,
+    version:VERSION,parseCommand,classify,resolvePerson,resolveTask,resolveSubtask,resolveEvaluator,answer,
     engineCoverage(){
       const defs=window.RPIAPlatform?.engineDefinitions||[];
       const map={
