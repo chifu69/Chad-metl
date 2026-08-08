@@ -19,7 +19,7 @@ function readEmployeePhoto(file,done){if(!file)return done('');if(!file.type.sta
 function normalize(s){
   const b=clone(window.METL_BASELINE);
   for(const k of Object.keys(b))if(s[k]===undefined)s[k]=b[k];
-  for(const k of ['personnel','evaluators','tasks','subtasks','sessions','results','actions','audit','sources','personnelMatrix','notifications'])if(!Array.isArray(s[k]))s[k]=[];
+  for(const k of ['personnel','evaluators','tasks','subtasks','sessions','results','actions','audit','sources','personnelMatrix','notifications','assessmentAssignments'])if(!Array.isArray(s[k]))s[k]=[];
 
   s.settings={...b.settings,...(s.settings||{})};
 
@@ -57,6 +57,7 @@ function normalize(s){
 function loadState(){try{const saved=JSON.parse(localStorage.getItem(DATA_KEY));return normalize(saved||clone(window.METL_BASELINE))}catch{return normalize(clone(window.METL_BASELINE))}}
 state=loadState();
 let rpConversation={lastIntent:'',shift:'',level:'',employeeNumber:'',taskId:'',lastAnswer:'',history:[]};
+let activeAssessmentAssignmentId='';
 function save(){localStorage.setItem(DATA_KEY,JSON.stringify(state))}
 function activeDepartments(){
   return (state.departments||[]).filter(d=>d&&d.status!=='Inactive');
@@ -87,6 +88,33 @@ function applyLanguage(lang,remember=true){uiLanguage=lang;if(remember)localStor
 function canManageMetl(){return currentUser?.role==='admin'||(currentUser?.role==='evaluator'&&currentUser?.maxLevel==='-40'&&currentUser?.manageMetl===true)}
 function canEvaluate(){return currentUser?.role==='admin'||currentUser?.role==='evaluator'}
 function canManagePersonnel(){return currentUser?.role==='admin'||currentUser?.managePersonnel===true}
+function assignmentStatus(a){
+  if(!a)return'Assigned';
+  if(a.status==='Completed'||a.status==='Cancelled')return a.status;
+  const due=String(a.dueDate||'');
+  if(due&&due<today())return'Overdue';
+  if(due===today())return'Due Today';
+  return'Assigned';
+}
+function currentUserAssignmentMatch(a){
+  if(!a||!currentUser)return false;
+  if(currentUser.role==='admin')return true;
+  if(currentUser.role==='viewer')return String(a.employeeNumber||'')===String(currentUser.employeeNumber||'');
+  if(currentUser.role==='evaluator'){
+    return String(a.evaluatorUsername||'').toLowerCase()===String(currentUser.username||'').toLowerCase();
+  }
+  return false;
+}
+function assignmentTask(a){return state.tasks.find(t=>String(t.id)===String(a?.taskId))||null}
+function assignmentPerson(a){return state.personnel.find(p=>String(p.employeeNumber)===String(a?.employeeNumber))||null}
+function authorizedEvaluatorUsers(taskId=''){
+  const task=state.tasks.find(t=>String(t.id)===String(taskId));
+  return authUsers
+    .filter(u=>u&&!u.disabled&&(u.role==='admin'||u.role==='evaluator'))
+    .filter(u=>!task||levelRank[u.maxLevel||'-10']>=levelRank[task.requiredLevel||'-10'])
+    .sort((a,b)=>String(a.name||a.username||'').localeCompare(String(b.name||b.username||'')));
+}
+
 function myProfile(){const u=currentUser;page(uiLanguage==='es'?'Mi perfil':'My Profile',uiLanguage==='es'?'Preferencias personales y seguridad':'Personal preferences and security',`<div class="profile-grid"><div class="card"><h3>${uiLanguage==='es'?'Cuenta':'Account'}</h3><p><b>${esc(u.name)}</b></p><p>${esc(u.role)} ${u.maxLevel||''}</p><label>${uiLanguage==='es'?'Idioma':'Language'}<select id="profileLanguage"><option value="en" ${uiLanguage==='en'?'selected':''}>English</option><option value="es" ${uiLanguage==='es'?'selected':''}>Español</option></select></label></div><div class="card"><h3>${uiLanguage==='es'?'Cambiar contraseña':'Change password'}</h3><label>${uiLanguage==='es'?'Contraseña actual':'Current password'}<input id="oldPwd" type="password"></label><label>${uiLanguage==='es'?'Nueva contraseña':'New password'}<input id="profileNewPwd" type="password" minlength="6"></label><label>${uiLanguage==='es'?'Confirmar contraseña':'Confirm password'}<input id="profileConfirmPwd" type="password" minlength="6"></label><button class="primary" id="saveProfilePwd">${uiLanguage==='es'?'Guardar contraseña':'Save password'}</button></div><div class="card full"><h3>Eagle</h3><p>${uiLanguage==='es'?'El cerebro local personaliza el orden de tus recomendaciones según tu actividad reciente. No modifica evaluaciones ni permisos.':'The local brain personalizes recommendation order from your recent activity. It never changes assessments or permissions.'}</p><button class="secondary" id="resetBrain">${uiLanguage==='es'?'Reiniciar aprendizaje personal':'Reset my learning'}</button></div></div>`);$('#profileLanguage').onchange=e=>applyLanguage(e.target.value);$('#saveProfilePwd').onclick=()=>{const a=$('#oldPwd').value,b=$('#profileNewPwd').value,c=$('#profileConfirmPwd').value;if(a!==u.password)return toast(uiLanguage==='es'?'Contraseña actual incorrecta':'Current password is incorrect');if(b.length<6)return toast(uiLanguage==='es'?'Use al menos 6 caracteres':'Use at least 6 characters');if(b!==c)return toast(uiLanguage==='es'?'Las contraseñas no coinciden':'Passwords do not match');u.password=b;saveUsers();toast(uiLanguage==='es'?'Contraseña actualizada':'Password updated')};$('#resetBrain').onclick=()=>{localStorage.removeItem('rpia-brain-'+u.username);toast(uiLanguage==='es'?'Aprendizaje reiniciado':'Learning reset')}}
 function trackInterest(topic,weight=1){if(!currentUser)return;const key='rpia-brain-'+currentUser.username;let d={};try{d=JSON.parse(localStorage.getItem(key))||{}}catch{};for(const k in d)d[k]*=.985;d[topic]=(d[topic]||0)+weight;localStorage.setItem(key,JSON.stringify(d))}
 function brainTop(){if(!currentUser)return[];try{return Object.entries(JSON.parse(localStorage.getItem('rpia-brain-'+currentUser.username))||{}).sort((a,b)=>b[1]-a[1]).slice(0,4)}catch{return[]}}
@@ -94,7 +122,7 @@ function login(){const name=$('#username').value.trim().toLowerCase(),pwd=$('#pi
 function changePassword(){const a=$('#newPassword').value,b=$('#confirmPassword').value;if(a.length<6)return toast('Use at least 6 characters');if(a!==b)return toast('Passwords do not match');if(a===pendingUser.password)return toast('Choose a different password');pendingUser.password=a;pendingUser.mustChange=false;saveUsers();$('#passwordModal').classList.add('hidden');completeLogin(pendingUser)}
 function completeLogin(u){currentUser=u;uiLanguage=u.language||uiLanguage;applyLanguage(uiLanguage,false);$('#login').classList.add('hidden');$('#app').classList.remove('hidden');$('#serverConfigBtn')?.classList.toggle('hidden',u.role!=='admin');$('#roleBadge').textContent=u.role==='admin'?' · Administrator':u.role==='viewer'?' · Read only':` · Approved Evaluator ${u.maxLevel}`;renderNav();navigate('dashboard')}
 function logout(){currentUser=null;$('#serverConfigBtn')?.classList.add('hidden');$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#pin').value='';$('#username').focus()}
-const navDefs=[['dashboard','Dashboard','Inicio'],['intelligence','Eagle','Eagle'],['personnel','Personnel','Personal'],['tasks','METL & Subtasks','METL y subtareas'],['matrix','Readiness Matrix','Matriz de preparación'],['assess','Assessment','Evaluación'],['sessions','Assessment History','Historial de evaluaciones'],['actions','Corrective Actions','Acciones correctivas'],['notifications','Notifications','Notificaciones'],['audit','Audit Trail','Auditoría'],['plant','Plant Intelligence','Inteligencia de planta'],['knowledge','Knowledge Center','Centro de conocimiento'],['engines','Engine Center','Centro de motores'],['profile','My Profile','Mi perfil'],['settings','Administration','Administración']];
+const navDefs=[['dashboard','Dashboard','Inicio'],['intelligence','Eagle','Eagle'],['personnel','Personnel','Personal'],['tasks','METL & Subtasks','METL y subtareas'],['matrix','Readiness Matrix','Matriz de preparación'],['assignments','Assigned Assessments','Evaluaciones asignadas'],['assess','Assessment','Evaluación'],['sessions','Assessment History','Historial de evaluaciones'],['actions','Corrective Actions','Acciones correctivas'],['notifications','Notifications','Notificaciones'],['audit','Audit Trail','Auditoría'],['plant','Plant Intelligence','Inteligencia de planta'],['knowledge','Knowledge Center','Centro de conocimiento'],['engines','Engine Center','Centro de motores'],['profile','My Profile','Mi perfil'],['settings','Administration','Administración']];
 function renderNav(){const allowed=navDefs.filter(x=>{if(x[0]==='settings')return currentUser.role==='admin';if(x[0]==='assess')return canEvaluate();if(x[0]==='audit')return currentUser.role==='admin'||currentUser.role==='evaluator';return true});$('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}</div>`;$$('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view))}
 function navigate(v){
   view=v;
@@ -108,6 +136,7 @@ function navigate(v){
     personnel,
     tasks,
     matrix:matrixView,
+    assignments:assignmentView,
     assess,
     sessions:sessionHistory,
     actions,
@@ -173,6 +202,66 @@ function reconcileCriticalGateActions(){
 window.reconcileCriticalGateActions=reconcileCriticalGateActions;
 
 function dashboard(){if(currentUser?.role==='viewer'){const p=state.personnel.find(x=>String(x.employeeNumber||'')===String(currentUser.employeeNumber||''));if(p){const m=personMetrics(p),myActions=correctiveActionRepository().filter(a=>String(a.employeeNumber||'')===String(p.employeeNumber)&&a.status!=='Closed'),mySessions=state.sessions.filter(x=>String(x.employeeNumber||'')===String(p.employeeNumber));page(uiLanguage==='es'?'Mi preparación':'My Readiness',`${esc(p.name)} · Employee #${esc(p.employeeNumber)} · ${esc(p.assignedLevel)}`,`<div class="card brain-hero"><span class="brain-chip">Eagle · Personal guidance</span><h2>${uiLanguage==='es'?'Bienvenido':'Welcome'}, ${esc(p.name)}.</h2><p>${uiLanguage==='es'?'Este panel muestra únicamente tu información de preparación.':'This dashboard shows your personal readiness information only.'}</p></div><div class="kpis"><div class="kpi"><b>${m.pct}%</b><span>My readiness</span></div><div class="kpi"><b>${esc(p.assignedLevel)}</b><span>Assigned level</span></div><div class="kpi warn"><b>${myActions.length}</b><span>My open actions</span></div><div class="kpi"><b>${mySessions.length}</b><span>My assessments</span></div></div><div class="card"><h3>My qualification status</h3><p><b>Highest fully qualified:</b> ${esc(m.highest)}</p><p><b>Critical Gate issues:</b> ${m.critical}</p><p><b>Independent performance:</b> ${m.critical||myActions.length?'Restricted where affected':'Based on current GO records'}</p></div>`);return}}const interests=brainTop();const people=activePeople(),metrics=people.map(p=>({...p,...personMetrics(p)}));const actionRows=correctiveActionRepository(),total=metrics.length,ready=metrics.filter(x=>x.pct===100&&!x.open&&!x.critical).length,open=actionRows.filter(a=>a.status!=='Closed').length,crit=metrics.reduce((a,x)=>a+x.critical,0),overdue=actionRows.filter(a=>a.status!=='Closed'&&a.targetDate&&a.targetDate<today()).length;const shifts=['A','B','C','D'].map(sh=>{const r=metrics.filter(x=>x.shift===sh);return{shift:sh,count:r.length,pct:r.length?Math.round(r.reduce((a,x)=>a+x.pct,0)/r.length):0,critical:r.reduce((a,x)=>a+x.critical,0)}});page(uiLanguage==='es'?'Panel de preparación':'Readiness Dashboard',uiLanguage==='es'?'Cálculos locales en vivo de competencias, evaluaciones y acciones':'Live local calculations from competency, assessment, and corrective-action records',`<div class="card brain-hero"><span class="brain-chip">Eagle · Adaptive local guidance</span><h2>${uiLanguage==='es'?'Bienvenido de nuevo':'Welcome back'}, ${esc(currentUser.name)}.</h2><p>${interests.length?(uiLanguage==='es'?'Tu enfoque reciente: ':'Your recent focus: ')+interests.map(x=>x[0]).join(' · '):(uiLanguage==='es'?'Eagle aprenderá qué información te ayuda más.':'Eagle will learn which information helps you most.')}</p></div><div class="kpis"><div class="kpi"><b>${total}</b><span>Active associates</span></div><div class="kpi good"><b>${ready}</b><span>Fully ready</span></div><div class="kpi warn"><b>${open}</b><span>Open actions</span></div><div class="kpi bad"><b>${crit}</b><span>Critical failures</span></div><div class="kpi bad"><b>${overdue}</b><span>Overdue actions</span></div></div><div class="grid"><div class="card"><h3>Shift readiness</h3>${shifts.map(s=>`<div class="shift-row"><b>${s.shift} Shift</b><div class="progress"><span style="width:${s.pct}%"></span></div><span>${s.pct}% · ${s.critical} critical</span></div>`).join('')}</div><div class="card"><h3>Priority attention</h3>${metrics.sort((a,b)=>b.critical-a.critical||b.open-a.open||a.pct-b.pct).slice(0,8).map(x=>`<button class="list-link personOpen" data-emp="${x.employeeNumber}"><span>${esc(x.name)} · ${x.shift} · ${x.assignedLevel}</span><span class="pill ${x.critical?'critical':x.open?'nogo':x.pct>=90?'go':'ne'}">${x.pct}%</span></button>`).join('')}</div></div>`,`<button class="secondary" id="exportDash">Export dashboard CSV</button>`);$$('.personOpen').forEach(b=>b.onclick=()=>personDetail(b.dataset.emp));$('#exportDash').onclick=exportDashboard}
+const rpDashboardBase=dashboard;
+dashboard=function(){
+  rpDashboardBase();
+
+  const all=(state.assessmentAssignments||[]).filter(a=>!['Completed','Cancelled'].includes(a.status));
+  let rows=[],heading='',message='';
+
+  if(currentUser?.role==='viewer'){
+    rows=all.filter(a=>String(a.employeeNumber||'')===String(currentUser.employeeNumber||''));
+    heading='My Assigned Assessments';
+    message=rows.length?'You have training or assessment work assigned.':'You have no assigned assessments right now.';
+  }else if(currentUser?.role==='evaluator'){
+    rows=all.filter(a=>String(a.evaluatorUsername||'').toLowerCase()===String(currentUser.username||'').toLowerCase());
+    heading='Assessments Assigned to Me';
+    message=rows.length?'Associates are waiting for evaluation.':'You have no assigned evaluations right now.';
+  }else if(currentUser?.role==='admin'){
+    rows=all;
+    heading='Assigned Assessment Work';
+    message=rows.length?'Training and evaluations are currently assigned.':'There are no active assessment assignments.';
+  }
+
+  if(!heading||!$('#main'))return;
+
+  const card=document.createElement('div');
+  card.className='card dashboard-assignment-card';
+  card.innerHTML=`
+    <div class="section-heading">
+      <div>
+        <small>ASSIGNED ASSESSMENTS</small>
+        <h3>${esc(heading)}</h3>
+        <p>${esc(message)}</p>
+      </div>
+      <span class="assignment-dashboard-count">${rows.length}</span>
+    </div>
+    ${rows.slice(0,4).map(a=>{
+      const p=assignmentPerson(a)||{};
+      const t=assignmentTask(a)||{};
+      const status=assignmentStatus(a);
+      return `<button class="list-link dashboardAssignmentOpen" data-id="${esc(a.id)}">
+        <span>
+          <b>${currentUser.role==='viewer'?esc(t.id||a.taskId)+' — '+esc(t.name||a.taskName):esc(p.name||a.employeeName)+' — '+esc(t.id||a.taskId)}</b>
+          <small>${currentUser.role==='evaluator'?`Due ${esc(a.dueDate||'')} · ${esc(t.name||a.taskName||'')}`:`Evaluator: ${esc(a.evaluatorName||'')} · Due ${esc(a.dueDate||'')}`}</small>
+        </span>
+        <span class="pill ${status==='Overdue'?'critical':status==='Due Today'?'nogo':'ne'}">${esc(status)}</span>
+      </button>`;
+    }).join('')}
+    <button class="secondary" id="openAllAssignments">Open Assigned Assessments</button>`;
+
+  const head=$('#main .page-head');
+  if(head&&head.nextSibling)$('#main').insertBefore(card,head.nextSibling);
+  else $('#main').prepend(card);
+
+  $$('.dashboardAssignmentOpen').forEach(b=>b.onclick=()=>{
+    const a=state.assessmentAssignments.find(x=>String(x.id)===String(b.dataset.id));
+    if(currentUser.role==='evaluator'||currentUser.role==='admin')openAssignedAssessment(a.id);
+    else assignmentView();
+  });
+  $('#openAllAssignments').onclick=()=>navigate('assignments');
+};
+
 function personnel(){
   page('Personnel Master','Search the central Personnel Master by employee number, name, shift, role, level, status, or qualified line',`<div class="filters"><input id="pSearch" type="search" inputmode="text" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="Search name or employee #"><select id="pShift"><option value="">All shifts</option>${['A','B','C','D'].map(x=>`<option>${x}</option>`).join('')}</select><select id="pStatus"><option value="">All statuses</option><option>Active</option><option>Leave of Absence</option><option>Inactive</option><option>Terminated</option><option>Vacant</option></select></div><div id="pSearchMeta" class="search-meta"></div><div id="ptable"></div>`,canManagePersonnel()?'<button class="primary" id="addPerson">Add personnel</button>':'');
   const normalizeValue=v=>String(v??'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[“”"']/g,'').replace(/[^a-zA-Z0-9\- ]/g,' ').replace(/\s+/g,' ').trim().toLowerCase();
@@ -255,6 +344,326 @@ function taskEdit(id){const existing=id?state.tasks.find(t=>t.id===id&&t.status=
 function subtaskEdit(taskId='',id='',cloneMode=false){const source=id?state.subtasks.find(s=>s.id===id):null,old=source&&!cloneMode?source:null;const defaultTask=taskId||state.tasks.find(t=>t.status==='Active')?.id||'';const p=source?clone(source):{id:'',taskId:defaultTask,sequence:state.subtasks.filter(s=>s.taskId===defaultTask).length+1,requiredLevel:'-10',criticality:'Supporting',status:'Active',name:'',standard:'',evaluationMethod:'Direct Observation',evidence:'',source:'',retrainingInterval:'',reassessmentInterval:'',srLeadVerification:false,independentAuthorization:false};if(cloneMode){p.id='';p.name=(p.name||'')+' (Copy)'}modal(`<h2>${old?'Revise':cloneMode?'Clone':'Create'} supporting subtask</h2><div class="form-grid"><label>Parent METL task<select id="sTask">${state.tasks.filter(t=>t.status==='Active').map(t=>`<option value="${t.id}" ${p.taskId===t.id?'selected':''}>${t.id} — ${esc(t.name)}</option>`).join('')}</select></label><label>Subtask ID<input id="sId" value="${esc(p.id)}" ${old?'readonly':''} placeholder="Example: M04-017"></label><label>Sequence<input id="sSeq" type="number" value="${p.sequence||1}"></label><label>Qualification level<select id="sLevel">${Object.keys(levelRank).map(x=>`<option ${p.requiredLevel===x?'selected':''}>${x}</option>`).join('')}</select></label><label class="full">Subtask name<textarea id="sName">${esc(p.name)}</textarea></label><label>Criticality<select id="sCritical"><option ${p.criticality==='Supporting'?'selected':''}>Supporting</option><option ${p.criticality==='Critical Gate'?'selected':''}>Critical Gate</option></select></label><label>Status<select id="sStatus"><option ${p.status!=='Inactive'?'selected':''}>Active</option><option ${p.status==='Inactive'?'selected':''}>Inactive</option></select></label><label>Evaluation method<input id="sMethod" value="${esc(p.evaluationMethod)}"></label><label>Training source / reference<input id="sSource" value="${esc(p.source)}"></label><label class="full">Performance standard<textarea id="sStd">${esc(p.standard)}</textarea></label><label class="full">Required evidence<textarea id="sEvidence">${esc(p.evidence)}</textarea></label><label>Retraining interval<input id="sRetrain" value="${esc(p.retrainingInterval)}"></label><label>Reassessment interval<input id="sReassess" value="${esc(p.reassessmentInterval)}"></label><label>Sr. Lead verification<select id="sVerify"><option value="false" ${!p.srLeadVerification?'selected':''}>No</option><option value="true" ${p.srLeadVerification?'selected':''}>Yes</option></select></label><label>Independent performance<select id="sInd"><option value="false" ${!p.independentAuthorization?'selected':''}>No</option><option value="true" ${p.independentAuthorization?'selected':''}>Yes</option></select></label><label class="full">Revision reason / notes<textarea id="sReason">${esc(p.revisionNote)}</textarea></label></div><div class="actions"><button class="primary" id="saveSub">${old?'Save revision':'Add subtask'}</button><button class="secondary close">Cancel</button></div>`);$('#sTask').onchange=()=>{if(!old&&!$('#sId').value.trim()){const t=$('#sTask').value,n=state.subtasks.filter(x=>x.taskId===t).length+1;$('#sId').value=t+'-'+String(n).padStart(3,'0')}};$('#sTask').dispatchEvent(new Event('change'));$('#saveSub').onclick=()=>{const data={...p,taskId:$('#sTask').value,id:$('#sId').value.trim(),sequence:+$('#sSeq').value,name:$('#sName').value.trim(),requiredLevel:$('#sLevel').value,criticality:$('#sCritical').value,status:$('#sStatus').value,evaluationMethod:$('#sMethod').value,source:$('#sSource').value,standard:$('#sStd').value,evidence:$('#sEvidence').value,retrainingInterval:$('#sRetrain').value,reassessmentInterval:$('#sReassess').value,srLeadVerification:$('#sVerify').value==='true',independentAuthorization:$('#sInd').value==='true',revisionNote:$('#sReason').value};if(!data.taskId||!data.id||!data.name)return toast('Parent task, Subtask ID, and name are required');if(!old&&state.subtasks.some(x=>x.id===data.id))return toast('Subtask ID already exists');if(old){const before=clone(old);Object.assign(old,data);audit('UPDATE','Subtask',old.id,'Controlled subtask revised',before,old)}else{state.subtasks.push(data);audit('CREATE','Subtask',data.id,cloneMode?'Subtask cloned':'Controlled subtask created',null,data)}closeModal();tasks()}}
 
 function matrixView(){const people=activePeople(),tasks=state.tasks.filter(t=>t.status==='Active');page('Readiness Matrix','Calculated from current assessment results; higher levels include all lower-level requirements',`<div class="filters"><select id="mxShift"><option value="">All shifts</option>${['A','B','C','D'].map(x=>`<option>${x}</option>`).join('')}</select><input id="mxSearch" placeholder="Search name, employee #, shift, role, or level"></div><div id="mxTable"></div>`);const draw=()=>{const sh=$('#mxShift').value,q=$('#mxSearch').value,rows=people.filter(p=>(!sh||p.shift===sh)&&SearchEngine.matchPerson(p,q));$('#mxTable').innerHTML=`<div class="table-wrap matrix-table"><table><thead><tr><th>Associate</th><th>Shift</th><th>Role</th><th>Assigned</th><th>Highest qualified</th>${tasks.map(t=>`<th>${t.id}</th>`).join('')}<th>Readiness</th></tr></thead><tbody>${rows.map(p=>{const m=personMetrics(p),latest=latestResults(p.employeeNumber);return`<tr><td>${esc(p.name)}</td><td>${p.shift}</td><td>${p.role}</td><td>${p.assignedLevel}</td><td>${m.highest}</td>${tasks.map(t=>{const subs=state.subtasks.filter(s=>s.taskId===t.id&&s.status==='Active'&&levelRank[s.requiredLevel]<=levelRank[p.assignedLevel]);const vals=subs.map(s=>latest.get(p.employeeNumber+'|'+s.id)?.result||'NE');let r=vals.length&&vals.every(x=>x==='GO')?'GO':vals.some(x=>x==='NO-GO')?'NO-GO':vals.some(x=>x==='REQUIRES ASSISTANCE')?'ASSIST':'NE';return`<td><span class="pill ${r==='GO'?'go':r==='NO-GO'?'nogo':r==='ASSIST'?'warn':'ne'}">${r}</span></td>`}).join('')}<td>${m.pct}%</td></tr>`}).join('')}</tbody></table></div>`};$('#mxShift').oninput=draw;$('#mxSearch').oninput=draw;draw()}
+
+function assignmentView(){
+  const all=[...(state.assessmentAssignments||[])].sort((a,b)=>{
+    const ac=assignmentStatus(a)==='Completed'?1:0,bc=assignmentStatus(b)==='Completed'?1:0;
+    if(ac!==bc)return ac-bc;
+    return String(a.dueDate||'9999-12-31').localeCompare(String(b.dueDate||'9999-12-31'));
+  });
+
+  let rows=all;
+  let title='Assigned Assessments';
+  let subtitle='Planned training and assessment work';
+
+  if(currentUser.role==='viewer'){
+    rows=all.filter(a=>String(a.employeeNumber||'')===String(currentUser.employeeNumber||''));
+    title='My Assigned Assessments';
+    subtitle='Training and assessments assigned to you';
+  }else if(currentUser.role==='evaluator'){
+    rows=all.filter(a=>String(a.evaluatorUsername||'').toLowerCase()===String(currentUser.username||'').toLowerCase());
+    title='Assessments Assigned to Me';
+    subtitle='Associates assigned to you for evaluation';
+  }
+
+  const actions=currentUser.role==='admin'
+    ?'<button class="primary" id="newAssignment">Assign Assessment</button>'
+    :'';
+
+  page(
+    title,
+    subtitle,
+    `<div class="filters">
+      <select id="assignmentStatusFilter">
+        <option value="">All statuses</option>
+        <option>Assigned</option>
+        <option>Due Today</option>
+        <option>Overdue</option>
+        <option>Completed</option>
+        <option>Cancelled</option>
+      </select>
+      <input id="assignmentSearch" type="search" placeholder="Search associate, task, or evaluator">
+    </div>
+    <div id="assignmentList"></div>`,
+    actions
+  );
+
+  const draw=()=>{
+    const st=$('#assignmentStatusFilter').value;
+    const q=String($('#assignmentSearch').value||'').toLowerCase().trim();
+    const filtered=rows.filter(a=>{
+      const p=assignmentPerson(a)||{};
+      const t=assignmentTask(a)||{};
+      const status=assignmentStatus(a);
+      const hay=[p.name,a.employeeNumber,t.id,t.name,a.evaluatorName,a.notes,status].join(' ').toLowerCase();
+      return(!st||status===st)&&(!q||hay.includes(q));
+    });
+
+    $('#assignmentList').innerHTML=`
+      <div class="card assignment-count-card">
+        <small><b>${filtered.length}</b> shown · <b>${rows.length}</b> total</small>
+      </div>
+      <div class="assignment-card-list">
+        ${filtered.map(a=>{
+          const p=assignmentPerson(a)||{};
+          const t=assignmentTask(a)||{};
+          const status=assignmentStatus(a);
+          const canOpen=(currentUser.role==='admin')||
+            (currentUser.role==='evaluator'&&String(a.evaluatorUsername||'').toLowerCase()===String(currentUser.username||'').toLowerCase());
+          return `<article class="assignment-card">
+            <div class="assignment-card-head">
+              <div>
+                <small>Associate</small>
+                <h3>${esc(p.name||a.employeeName||'Unknown associate')}</h3>
+                <span>#${esc(a.employeeNumber||'')}</span>
+              </div>
+              <span class="pill ${status==='Completed'?'go':status==='Overdue'?'critical':status==='Due Today'?'nogo':'ne'}">${esc(status)}</span>
+            </div>
+            <div class="assignment-grid">
+              <div><small>METL task</small><b>${esc(t.id||a.taskId)} — ${esc(t.name||a.taskName||'')}</b></div>
+              <div><small>Due date</small><b>${esc(a.dueDate||'—')}</b></div>
+              <div><small>Assigned evaluator</small><b>${esc(a.evaluatorName||'—')}</b></div>
+              <div><small>Priority</small><b>${esc(a.priority||'Normal')}</b></div>
+              <div><small>Assigned by</small><b>${esc(a.assignedByName||'')}</b></div>
+              <div><small>Department</small><b>${esc(departmentName(a.departmentId))}</b></div>
+            </div>
+            ${a.notes?`<p class="assignment-notes"><b>Notes:</b> ${esc(a.notes)}</p>`:''}
+            <div class="actions">
+              ${canOpen&&status!=='Completed'&&status!=='Cancelled'?`<button class="primary openAssignedAssessment" data-id="${esc(a.id)}">Open Assessment</button>`:''}
+              ${currentUser.role==='admin'&&status!=='Completed'&&status!=='Cancelled'?`<button class="secondary cancelAssignment" data-id="${esc(a.id)}">Cancel assignment</button>`:''}
+              ${a.sessionId?`<button class="secondary viewAssignmentSession" data-session="${esc(a.sessionId)}">View completed assessment</button>`:''}
+            </div>
+          </article>`;
+        }).join('')||'<div class="card empty-state"><b>No assigned assessments found.</b></div>'}
+      </div>`;
+
+    $$('.openAssignedAssessment').forEach(b=>b.onclick=()=>openAssignedAssessment(b.dataset.id));
+    $$('.viewAssignmentSession').forEach(b=>b.onclick=()=>sessionDetail(b.dataset.session));
+    $$('.cancelAssignment').forEach(b=>b.onclick=()=>{
+      const a=state.assessmentAssignments.find(x=>String(x.id)===String(b.dataset.id));
+      if(!a)return;
+      if(!confirm(`Cancel the assessment assignment for ${a.employeeName||a.employeeNumber}?`))return;
+      const before=clone(a);
+      a.status='Cancelled';
+      a.cancelledAt=new Date().toISOString();
+      a.cancelledBy=currentUser.name;
+      audit('CANCEL','Assessment Assignment',a.id,`Assignment cancelled for ${a.employeeName||a.employeeNumber}`,before,a);
+      assignmentView();
+    });
+  };
+
+  $('#assignmentStatusFilter').onchange=draw;
+  $('#assignmentSearch').oninput=draw;
+  draw();
+
+  if(currentUser.role==='admin')$('#newAssignment').onclick=createAssessmentAssignment;
+}
+
+function createAssessmentAssignment(){
+  const initialDept=defaultDepartmentId();
+
+  modal(`<h2>Assign Assessment</h2>
+    <p>Schedule an associate for training/evaluation and assign an authorized evaluator.</p>
+    <div class="form-grid">
+      <label>Department
+        <select id="assignDepartment">${departmentOptions(initialDept)}</select>
+      </label>
+
+      <label class="full">Find associate
+        <input id="assignPersonSearch" type="search" placeholder="Search by name or employee #">
+      </label>
+
+      <label>Associate
+        <select id="assignPerson"><option value="">Select associate</option></select>
+      </label>
+
+      <label>METL task
+        <select id="assignTask"><option value="">Select task</option></select>
+      </label>
+
+      <label>Assigned evaluator
+        <select id="assignEvaluator"><option value="">Select evaluator</option></select>
+      </label>
+
+      <label>Due date
+        <input id="assignDueDate" type="date" value="${today()}">
+      </label>
+
+      <label>Priority
+        <select id="assignPriority">
+          <option>Normal</option>
+          <option>High</option>
+          <option>Urgent</option>
+        </select>
+      </label>
+
+      <label class="full">Assignment notes
+        <textarea id="assignNotes" placeholder="Example: Complete this week before independent operation."></textarea>
+      </label>
+    </div>
+    <div class="actions">
+      <button class="primary" id="saveAssessmentAssignment">Assign Assessment</button>
+      <button class="secondary close">Cancel</button>
+    </div>`);
+
+  const norm=v=>String(v??'')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-zA-Z0-9]+/g,' ')
+    .toLowerCase()
+    .replace(/\s+/g,' ')
+    .trim();
+
+  const refreshPeople=()=>{
+    const dept=$('#assignDepartment').value;
+    const q=norm($('#assignPersonSearch').value);
+    const tokens=q?q.split(' ').filter(Boolean):[];
+    const people=activePeople()
+      .filter(p=>!dept||String(p.departmentId||defaultDepartmentId())===String(dept))
+      .filter(p=>{
+        if(!tokens.length)return true;
+        const hay=norm(`${p.name} ${p.employeeNumber} ${p.shift} ${p.role}`);
+        return tokens.every(t=>hay.includes(t));
+      })
+      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+
+    $('#assignPerson').innerHTML='<option value="">Select associate</option>'+
+      people.map(p=>`<option value="${esc(p.employeeNumber)}">${esc(p.name)} · #${esc(p.employeeNumber)} · ${esc(p.shift)} · ${esc(p.assignedLevel)}</option>`).join('');
+
+    if(tokens.length&&people.length===1)$('#assignPerson').value=String(people[0].employeeNumber);
+  };
+
+  const refreshTasks=()=>{
+    const dept=$('#assignDepartment').value;
+    const tasks=state.tasks
+      .filter(t=>t.status==='Active')
+      .filter(t=>!dept||String(t.departmentId||defaultDepartmentId())===String(dept))
+      .sort((a,b)=>String(a.id||'').localeCompare(String(b.id||'')));
+    $('#assignTask').innerHTML='<option value="">Select task</option>'+
+      tasks.map(t=>`<option value="${esc(t.id)}">${esc(t.id)} — ${esc(t.name)} (${esc(t.requiredLevel)})</option>`).join('');
+    refreshEvaluators();
+  };
+
+  const refreshEvaluators=()=>{
+    const taskId=$('#assignTask')?.value||'';
+    const users=authorizedEvaluatorUsers(taskId);
+    $('#assignEvaluator').innerHTML='<option value="">Select evaluator</option>'+
+      users.map(u=>`<option value="${esc(u.username)}">${esc(u.name||u.username)} · ${u.role==='admin'?'Administrator':'Evaluator '+(u.maxLevel||'')}</option>`).join('');
+  };
+
+  $('#assignDepartment').onchange=()=>{
+    $('#assignPersonSearch').value='';
+    refreshPeople();
+    refreshTasks();
+  };
+  $('#assignPersonSearch').oninput=refreshPeople;
+  $('#assignTask').onchange=refreshEvaluators;
+
+  refreshPeople();
+  refreshTasks();
+
+  $('#saveAssessmentAssignment').onclick=()=>{
+    const emp=$('#assignPerson').value;
+    const taskId=$('#assignTask').value;
+    const evaluatorUsername=$('#assignEvaluator').value;
+    const dueDate=$('#assignDueDate').value;
+
+    if(!emp)return toast('Select an associate');
+    if(!taskId)return toast('Select a METL task');
+    if(!evaluatorUsername)return toast('Select an evaluator');
+    if(!dueDate)return toast('Select a due date');
+
+    const person=state.personnel.find(p=>String(p.employeeNumber)===String(emp));
+    const task=state.tasks.find(t=>String(t.id)===String(taskId));
+    const evaluator=authUsers.find(u=>String(u.username)===String(evaluatorUsername));
+    if(!person||!task||!evaluator)return toast('Unable to create assignment');
+
+    if(levelRank[evaluator.maxLevel||'-10']<levelRank[task.requiredLevel||'-10']){
+      return toast('Selected evaluator is not authorized for this task level');
+    }
+
+    const duplicate=(state.assessmentAssignments||[]).some(a=>
+      !['Completed','Cancelled'].includes(a.status)&&
+      String(a.employeeNumber)===String(emp)&&
+      String(a.taskId)===String(taskId)
+    );
+    if(duplicate&&!confirm('This associate already has an active assignment for this task. Create another one?'))return;
+
+    const record={
+      id:uid('ASN'),
+      departmentId:person.departmentId||task.departmentId||defaultDepartmentId(),
+      employeeNumber:String(person.employeeNumber),
+      employeeName:person.name,
+      taskId:task.id,
+      taskName:task.name,
+      requiredLevel:task.requiredLevel,
+      evaluatorUsername:evaluator.username,
+      evaluatorName:evaluator.name||evaluator.username,
+      evaluatorMaxLevel:evaluator.maxLevel||'-10',
+      dueDate,
+      priority:$('#assignPriority').value,
+      notes:$('#assignNotes').value.trim(),
+      status:'Assigned',
+      assignedAt:new Date().toISOString(),
+      assignedByUsername:currentUser.username,
+      assignedByName:currentUser.name,
+      sessionId:''
+    };
+
+    state.assessmentAssignments.push(record);
+    audit('ASSIGN','Assessment Assignment',record.id,`${record.employeeName} assigned ${record.taskId} to ${record.evaluatorName}`,null,record);
+    closeModal();
+    toast('Assessment assigned');
+    assignmentView();
+  };
+}
+
+function openAssignedAssessment(id){
+  const a=state.assessmentAssignments.find(x=>String(x.id)===String(id));
+  if(!a)return toast('Assessment assignment not found');
+
+  if(!canEvaluate())return toast('You are not authorized to conduct assessments');
+
+  if(currentUser.role==='evaluator'&&
+     String(a.evaluatorUsername||'').toLowerCase()!==String(currentUser.username||'').toLowerCase()){
+    return toast('This assessment is assigned to another evaluator');
+  }
+
+  const task=assignmentTask(a);
+  if(task&&levelRank[currentUser.maxLevel||'-10']<levelRank[task.requiredLevel||'-10']){
+    return toast('You are not authorized for this task level');
+  }
+
+  activeAssessmentAssignmentId=a.id;
+  assess();
+
+  setTimeout(()=>{
+    const person=assignmentPerson(a);
+    if($('#aDepartment')){
+      $('#aDepartment').value=a.departmentId||person?.departmentId||defaultDepartmentId();
+      $('#aDepartment').dispatchEvent(new Event('change'));
+    }
+    if($('#aPersonSearch')){
+      $('#aPersonSearch').value=person?.name||a.employeeName||a.employeeNumber;
+      $('#aPersonSearch').dispatchEvent(new Event('input'));
+    }
+    if($('#aPerson')){
+      $('#aPerson').value=String(a.employeeNumber);
+      $('#aPerson').dispatchEvent(new Event('change'));
+    }
+    if($('#aTask')){
+      $('#aTask').value=String(a.taskId);
+      $('#aTask').dispatchEvent(new Event('change'));
+    }
+    if($('#aNotes')){
+      $('#aNotes').value=[`Assigned assessment ${a.id}`,a.notes||''].filter(Boolean).join(' — ');
+    }
+    if($('#startAssessment')&&!$('#startAssessment').disabled){
+      $('#startAssessment').click();
+    }
+  },30);
+}
+
 function assess(){
   const initialDept=defaultDepartmentId();
   const tasks=state.tasks.filter(t=>t.status==='Active');
@@ -483,7 +892,18 @@ function drawAssessment(){
   updateAssessmentProgress();
 }
 
-function submitAssessment(){const emp=$('#aPerson').value,tid=$('#aTask').value,p=state.personnel.find(x=>x.employeeNumber===emp),t=state.tasks.find(x=>x.id===tid),sid=uid('ASMT');const rows=$$('.subtask-eval').map(box=>{const s=state.subtasks.find(x=>x.id===box.dataset.sub);return{subtaskId:s.id,subtaskName:s.name,criticality:s.criticality,requiredLevel:s.requiredLevel,result:box.querySelector('.r').value,evidenceReference:box.querySelector('.ev').value,observation:box.querySelector('.obs').value,srLeadVerification:box.querySelector('.verify')?.value||''}});if(rows.every(r=>r.result==='NOT EVALUATED'))return toast('Evaluate at least one subtask');const criticalFail=rows.some(r=>r.criticality==='Critical Gate'&&r.result!=='GO'&&r.result!=='NOT EVALUATED');const noGo=rows.some(r=>r.result==='NO-GO'),assist=rows.some(r=>r.result==='REQUIRES ASSISTANCE');const finalStatus=criticalFail?'UNQUALIFIED — CRITICAL GATE':noGo?'UNQUALIFIED':assist?'REQUIRES ASSISTANCE':'RECORDED';const session={id:sid,employeeNumber:emp,associateName:p.name,shift:p.shift,role:p.role,assignedLevel:p.assignedLevel,taskId:tid,taskName:t.name,taskRevision:t.revision,date:$('#aDate').value,evaluatorName:currentUser.name,evaluatorUsername:currentUser.username,method:$('#aMethod').value,status:'Closed',location:$('#aLine').value,notes:$('#aNotes').value,finalStatus,retrainingRequired:$('#aRetrain').value,reassessmentDate:$('#aReDate').value,correctiveAction:$('#aCorrective').value,signature:`${currentUser.name} · ${new Date().toLocaleString()}`};state.sessions.push(session);for(const r of rows){state.results.push({sessionId:sid,employeeNumber:emp,associateName:p.name,shift:p.shift,role:p.role,taskId:tid,taskName:t.name,date:session.date,evaluatorName:currentUser.name,...r,recordStatus:'Historical'});if(['NO-GO','SUSPENDED'].includes(r.result)||(r.criticality==='Critical Gate'&&r.result==='REQUIRES ASSISTANCE')){const due=$('#aReDate').value||new Date(Date.now()+state.settings.defaultCorrectiveActionDays*86400000).toISOString().slice(0,10);state.actions.push({id:uid('CA'),employeeNumber:emp,employee:p.name,shift:p.shift,taskId:tid,subtaskId:r.subtaskId,standardNotMet:r.observation||r.subtaskName,immediateCoaching:'',requiredRetraining:$('#aCorrective').value||'Targeted retraining required',responsibleTrainer:currentUser.name,targetDate:due,reassessmentDate:$('#aReDate').value,reassessmentResult:'',status:'Open',criticality:r.criticality,created:new Date().toISOString(),createdBy:currentUser.name})}}audit('SUBMIT','Assessment',sid,`${p.name} / ${tid} / ${finalStatus}`,null,session);toast(criticalFail?'Saved — Critical Gate blocks qualification':'Assessment saved and signed');sessionHistory()}
+function submitAssessment(){const emp=$('#aPerson').value,tid=$('#aTask').value,p=state.personnel.find(x=>x.employeeNumber===emp),t=state.tasks.find(x=>x.id===tid),sid=uid('ASMT');const rows=$$('.subtask-eval').map(box=>{const s=state.subtasks.find(x=>x.id===box.dataset.sub);return{subtaskId:s.id,subtaskName:s.name,criticality:s.criticality,requiredLevel:s.requiredLevel,result:box.querySelector('.r').value,evidenceReference:box.querySelector('.ev').value,observation:box.querySelector('.obs').value,srLeadVerification:box.querySelector('.verify')?.value||''}});if(rows.every(r=>r.result==='NOT EVALUATED'))return toast('Evaluate at least one subtask');const criticalFail=rows.some(r=>r.criticality==='Critical Gate'&&r.result!=='GO'&&r.result!=='NOT EVALUATED');const noGo=rows.some(r=>r.result==='NO-GO'),assist=rows.some(r=>r.result==='REQUIRES ASSISTANCE');const finalStatus=criticalFail?'UNQUALIFIED — CRITICAL GATE':noGo?'UNQUALIFIED':assist?'REQUIRES ASSISTANCE':'RECORDED';const session={id:sid,assignmentId:activeAssessmentAssignmentId||'',employeeNumber:emp,associateName:p.name,shift:p.shift,role:p.role,assignedLevel:p.assignedLevel,taskId:tid,taskName:t.name,taskRevision:t.revision,date:$('#aDate').value,evaluatorName:currentUser.name,evaluatorUsername:currentUser.username,method:$('#aMethod').value,status:'Closed',location:$('#aLine').value,notes:$('#aNotes').value,finalStatus,retrainingRequired:$('#aRetrain').value,reassessmentDate:$('#aReDate').value,correctiveAction:$('#aCorrective').value,signature:`${currentUser.name} · ${new Date().toLocaleString()}`};state.sessions.push(session);for(const r of rows){state.results.push({sessionId:sid,assignmentId:activeAssessmentAssignmentId||'',employeeNumber:emp,associateName:p.name,shift:p.shift,role:p.role,taskId:tid,taskName:t.name,date:session.date,evaluatorName:currentUser.name,...r,recordStatus:'Historical'});if(['NO-GO','SUSPENDED'].includes(r.result)||(r.criticality==='Critical Gate'&&r.result==='REQUIRES ASSISTANCE')){const due=$('#aReDate').value||new Date(Date.now()+state.settings.defaultCorrectiveActionDays*86400000).toISOString().slice(0,10);state.actions.push({id:uid('CA'),employeeNumber:emp,employee:p.name,shift:p.shift,taskId:tid,subtaskId:r.subtaskId,standardNotMet:r.observation||r.subtaskName,immediateCoaching:'',requiredRetraining:$('#aCorrective').value||'Targeted retraining required',responsibleTrainer:currentUser.name,targetDate:due,reassessmentDate:$('#aReDate').value,reassessmentResult:'',status:'Open',criticality:r.criticality,created:new Date().toISOString(),createdBy:currentUser.name})}}if(activeAssessmentAssignmentId){
+  const assigned=state.assessmentAssignments.find(a=>String(a.id)===String(activeAssessmentAssignmentId));
+  if(assigned){
+    assigned.status='Completed';
+    assigned.completedAt=new Date().toISOString();
+    assigned.completedByUsername=currentUser.username;
+    assigned.completedByName=currentUser.name;
+    assigned.sessionId=sid;
+    assigned.finalStatus=finalStatus;
+  }
+  activeAssessmentAssignmentId='';
+}audit('SUBMIT','Assessment',sid,`${p.name} / ${tid} / ${finalStatus}`,null,session);toast(criticalFail?'Saved — Critical Gate blocks qualification':'Assessment saved and signed');sessionHistory()}
 function sessionTable(rows){return`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Associate</th><th>Task</th><th>Evaluator</th><th>Method</th><th>Final status</th><th></th></tr></thead><tbody>${rows.map(s=>`<tr><td>${esc(s.date)}</td><td>${esc(s.associateName)}</td><td>${s.taskId} — ${esc(s.taskName)}</td><td>${esc(s.evaluatorName)}</td><td>${esc(s.method)}</td><td><span class="pill ${String(s.finalStatus).includes('CRITICAL')?'critical':String(s.finalStatus).includes('UNQUALIFIED')?'nogo':'go'}">${esc(s.finalStatus||s.status)}</span></td><td><button class="secondary sv" data-id="${s.id}">View</button></td></tr>`).join('')||'<tr><td colspan="7">No assessment sessions.</td></tr>'}</tbody></table></div>`}
 function sessionHistory(){const rows=[...state.sessions].sort((a,b)=>(b.date||'').localeCompare(a.date||''));page('Assessment History','Signed sessions remain preserved; reassessments are separate records',`<div class="filters"><input id="hSearch" placeholder="Search associate, task, evaluator"><select id="hResult"><option value="">All results</option><option>UNQUALIFIED</option><option>CRITICAL</option><option>RECORDED</option></select></div><div id="hTable"></div>`,'<button class="secondary" id="exportAssess">Export assessments CSV</button>');const draw=()=>{const q=$('#hSearch').value.toLowerCase(),r=$('#hResult').value;const f=rows.filter(s=>(s.associateName+' '+s.taskId+' '+s.taskName+' '+s.evaluatorName).toLowerCase().includes(q)&&(!r||String(s.finalStatus).includes(r)));$('#hTable').innerHTML=sessionTable(f);$$('.sv').forEach(b=>b.onclick=()=>sessionDetail(b.dataset.id))};$('#hSearch').oninput=draw;$('#hResult').oninput=draw;draw();$('#exportAssess').onclick=exportAssessments}
 function sessionDetail(id){const s=state.sessions.find(x=>x.id===id),rows=state.results.filter(r=>r.sessionId===id);page(`Assessment ${s.id}`,`${s.date} · ${esc(s.associateName)} · ${s.taskId}`,`<div class="card"><p><b>Evaluator:</b> ${esc(s.evaluatorName)} · <b>Method:</b> ${esc(s.method)} · <b>Location:</b> ${esc(s.location)}</p><p><b>Final status:</b> ${esc(s.finalStatus)}</p><p><b>Signature:</b> ${esc(s.signature)}</p><p><b>Reassessment:</b> ${esc(s.reassessmentDate||'Not scheduled')}</p></div><div class="table-wrap"><table><thead><tr><th>Subtask</th><th>Criticality</th><th>Result</th><th>Evidence</th><th>Observation</th><th>Verification</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.subtaskId} — ${esc(r.subtaskName)}</td><td>${esc(r.criticality)}</td><td>${esc(r.result)}</td><td>${esc(r.evidenceReference)}</td><td>${esc(r.observation)}</td><td>${esc(r.srLeadVerification)}</td></tr>`).join('')}</tbody></table></div>`,'<button class="secondary" id="backHist">Back</button>');$('#backHist').onclick=sessionHistory}
@@ -730,6 +1150,7 @@ function actions(focusActionId=''){
 function actionDetail(id){const a=state.actions.find(x=>x.id===id);modal(`<h2>Corrective Action ${a.id}</h2><div class="form-grid"><label>Associate<input value="${esc(a.employee)}" readonly></label><label>Task / Subtask<input value="${a.taskId} / ${a.subtaskId}" readonly></label><label class="full">Standard not met<textarea id="caStd">${esc(a.standardNotMet||a.observation)}</textarea></label><label class="full">Immediate coaching<textarea id="caCoach">${esc(a.immediateCoaching)}</textarea></label><label class="full">Required retraining<textarea id="caTrain">${esc(a.requiredRetraining)}</textarea></label><label>Responsible trainer<input id="caOwner" value="${esc(a.responsibleTrainer||a.owner)}"></label><label>Target completion<input id="caDue" type="date" value="${esc(a.targetDate)}"></label><label>Reassessment date<input id="caRe" type="date" value="${esc(a.reassessmentDate)}"></label><label>Reassessment result<select id="caResult"><option></option>${['GO','NO-GO','REQUIRES ASSISTANCE'].map(x=>`<option ${a.reassessmentResult===x?'selected':''}>${x}</option>`).join('')}</select></label></div><div class="actions"><button class="primary" id="saveCA">Save</button>${a.status!=='Closed'?'<button class="secondary" id="closeCA">Close after demonstrated competency</button>':''}<button class="secondary close">Cancel</button></div>`);$('#saveCA').onclick=()=>{const old=clone(a);Object.assign(a,{standardNotMet:$('#caStd').value,immediateCoaching:$('#caCoach').value,requiredRetraining:$('#caTrain').value,responsibleTrainer:$('#caOwner').value,targetDate:$('#caDue').value,reassessmentDate:$('#caRe').value,reassessmentResult:$('#caResult').value});audit('UPDATE','Corrective Action',a.id,'Action plan updated',old,a);closeModal();actions()};if($('#closeCA'))$('#closeCA').onclick=()=>{if($('#caResult').value!=='GO')return toast('A GO reassessment is required before closure');const old=clone(a);Object.assign(a,{reassessmentResult:'GO',status:'Closed',closureDate:new Date().toISOString(),closedBy:currentUser.name,closureAuthority:currentUser.maxLevel});audit('CLOSE','Corrective Action',a.id,'Closed after GO reassessment',old,a);closeModal();actions()}}
 function buildNotifications(){
   const n=[],now=today();
+
   for(const a of correctiveActionRepository()){
     if(a.status==='Closed')continue;
 
@@ -762,6 +1183,27 @@ function buildNotifications(){
       });
     }
   }
+
+  const assignments=(state.assessmentAssignments||[]).filter(a=>
+    !['Completed','Cancelled'].includes(a.status)&&currentUserAssignmentMatch(a)
+  );
+
+  for(const a of assignments){
+    const p=assignmentPerson(a)||{};
+    const t=assignmentTask(a)||{};
+    const status=assignmentStatus(a);
+    const viewer=currentUser?.role==='viewer';
+    n.push({
+      type:viewer?'Assigned Assessment':'Assessment Assignment',
+      severity:status==='Overdue'||status==='Due Today'?'high':'medium',
+      text:viewer
+        ?`${t.id||a.taskId} — ${t.name||a.taskName||''} due ${a.dueDate||''}`
+        :`${p.name||a.employeeName} — ${t.id||a.taskId} due ${a.dueDate||''}`,
+      recordType:'assignment',
+      recordId:a.id
+    });
+  }
+
   return n;
 }
 function notificationView(){
@@ -778,6 +1220,7 @@ function notificationView(){
     if(!n)return;
     if(n.recordType==='correctiveAction'&&n.recordId)return actions(n.recordId);
     if(n.recordType==='assessment'&&n.recordId)return sessionDetail(n.recordId);
+    if(n.recordType==='assignment'&&n.recordId){if(currentUser.role==='viewer')return assignmentView();return openAssignedAssessment(n.recordId);}
     if(n.type.includes('Corrective'))return actions();
     if(n.type.includes('Reassessment'))return sessionHistory();
   });
@@ -1114,7 +1557,7 @@ function exportAssessments(){
 function restoreBackup(e){const f=e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const obj=JSON.parse(reader.result);state=normalize(obj);audit('RESTORE','System','backup','JSON backup restored');toast('Backup restored');dashboard()}catch{toast('Invalid backup file')}};reader.readAsText(f)}
 function modal(html){document.body.insertAdjacentHTML('beforeend',`<div class="modal"><div class="modal-card">${html}</div></div>`);$$('.close').forEach(b=>b.onclick=closeModal)} function closeModal(){$('.modal')?.remove()}
 $('#langEn').onclick=()=>applyLanguage('en');$('#langEs').onclick=()=>applyLanguage('es');if($('#languageMenuBtn'))$('#languageMenuBtn').onclick=()=>{const menu=$('#languageMenu');const opening=menu.classList.contains('hidden');menu.classList.toggle('hidden');$('#languageMenuBtn').setAttribute('aria-expanded',opening?'true':'false')};document.addEventListener('click',e=>{const wrap=e.target.closest?.('.login-language');if(!wrap){$('#languageMenu')?.classList.add('hidden');$('#languageMenuBtn')?.setAttribute('aria-expanded','false')}});applyLanguage(uiLanguage,false);$('#loginBtn').onclick=login;$('#pin').onkeydown=e=>{if(e.key==='Enter')login()};$('#changePasswordBtn').onclick=changePassword;$('#profileBtn').onclick=()=>navigate('profile');$('#serverConfigBtn').onclick=()=>window.RpiaServerSetup.open();$('#logoutBtn').onclick=logout;$('#menuBtn').onclick=()=>{$('#nav').classList.toggle('open');$('#navScrim').classList.toggle('open')};$('#navScrim').onclick=()=>{$('#nav').classList.remove('open');$('#navScrim').classList.remove('open')};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=9.10.1').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v=9.11.0').catch(()=>{});window.addEventListener('error',e=>{const st=$('#startupStatus');if(st){st.textContent='Startup error: '+(e.message||'Unknown error');st.classList.add('error')}});
 
 /* RP v6.1 — core compliance implementation overrides */
 function matrixView(){

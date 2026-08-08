@@ -361,3 +361,28 @@ html,body{max-width:100%;overflow-x:hidden}
   }
   #saveAssessmentTop{width:100%}
 }
+
+
+/* v9.11.0 Assigned Assessment workflow */
+.assignment-count-card{padding:12px 16px;margin-bottom:12px}
+.assignment-card-list{display:grid;gap:12px}
+.assignment-card{
+  display:grid;gap:14px;padding:16px;border:1px solid var(--line);
+  border-radius:18px;background:var(--card);box-shadow:var(--shadow);min-width:0
+}
+.assignment-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.assignment-card-head h3{margin:0;font-size:1.08rem;overflow-wrap:anywhere}
+.assignment-card-head small,.assignment-grid small{display:block;color:var(--muted);font-size:.72rem;margin-bottom:4px}
+.assignment-card-head span{display:block;color:var(--muted);font-weight:800;margin-top:3px}
+.assignment-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.assignment-grid>div{padding:10px;border-radius:12px;background:var(--soft);min-width:0}
+.assignment-grid b{display:block;overflow-wrap:anywhere}
+.assignment-notes{margin:0;padding:10px;border-radius:12px;background:var(--soft)}
+.dashboard-assignment-card{margin-bottom:16px}
+.assignment-dashboard-count{
+  display:grid;place-items:center;min-width:48px;height:48px;padding:0 12px;
+  border-radius:16px;background:var(--soft);font-size:1.35rem;font-weight:900;color:var(--accent)
+}
+@media(max-width:600px){
+  .assignment-grid{grid-template-columns:1fr}
+}

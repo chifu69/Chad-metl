@@ -1,4 +1,4 @@
-const CACHE='rp-v9.10.1-assessment-flow-fix';
+const CACHE='rp-v9.11.0-assigned-assessments';
 const ASSETS=[
   './',
   './index.html',
