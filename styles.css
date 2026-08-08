@@ -490,3 +490,110 @@ html,body{max-width:100%;overflow-x:hidden}
 @media(prefers-reduced-motion:reduce){
   .rp-header-motto{animation:none}
 }
+
+
+/* v9.12.4 definitive header motto styling + visible animation */
+.rp-header-motto{
+  display:flex!important;
+  flex-direction:column!important;
+  justify-content:center!important;
+  align-items:center!important;
+  gap:2px!important;
+  margin:0 8px 0 auto!important;
+  padding:0!important;
+  min-width:94px!important;
+  max-width:108px!important;
+  width:auto!important;
+  height:auto!important;
+  background:transparent!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  overflow:visible!important;
+  color:#fff!important;
+  text-align:center!important;
+  white-space:nowrap!important;
+  opacity:1!important;
+  animation:rpMottoEntrance .65s ease-out both, rpMottoGlow 3.2s ease-in-out 1s infinite!important;
+}
+
+.rp-header-motto span{
+  display:block!important;
+  width:auto!important;
+  min-width:0!important;
+  max-width:none!important;
+  margin:0!important;
+  padding:0!important;
+  background:transparent!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  color:#fff!important;
+  font-size:.55rem!important;
+  line-height:1.08!important;
+  font-weight:900!important;
+  letter-spacing:.07em!important;
+  text-align:center!important;
+  white-space:nowrap!important;
+  overflow:visible!important;
+  text-overflow:clip!important;
+  animation:none!important;
+}
+
+@keyframes rpMottoEntrance{
+  0%{opacity:0;transform:translateY(-5px) scale(.96)}
+  100%{opacity:1;transform:translateY(0) scale(1)}
+}
+
+@keyframes rpMottoGlow{
+  0%,70%,100%{
+    transform:scale(1);
+    filter:brightness(1);
+    text-shadow:none;
+  }
+  80%{
+    transform:scale(1.05);
+    filter:brightness(1.28);
+    text-shadow:0 0 7px rgba(255,255,255,.55),0 0 14px rgba(255,255,255,.20);
+  }
+  90%{
+    transform:scale(1.015);
+    filter:brightness(1.08);
+    text-shadow:0 0 4px rgba(255,255,255,.28);
+  }
+}
+
+@media(max-width:700px){
+  .rp-header-motto{
+    min-width:82px!important;
+    max-width:88px!important;
+    margin-right:5px!important;
+  }
+  .rp-header-motto span{
+    font-size:.48rem!important;
+    letter-spacing:.045em!important;
+  }
+}
+
+@media(max-width:430px){
+  .rp-header-motto{
+    min-width:76px!important;
+    max-width:80px!important;
+    margin-right:3px!important;
+  }
+  .rp-header-motto span{
+    font-size:.43rem!important;
+    letter-spacing:.025em!important;
+  }
+}
+
+/* Keep a visible glow even when Reduce Motion is enabled. */
+@media(prefers-reduced-motion:reduce){
+  .rp-header-motto{
+    animation:rpMottoGlowReduced 4s ease-in-out infinite!important;
+  }
+  @keyframes rpMottoGlowReduced{
+    0%,75%,100%{filter:brightness(1);text-shadow:none}
+    86%{filter:brightness(1.2);text-shadow:0 0 7px rgba(255,255,255,.45)}
+  }
+}

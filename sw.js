@@ -1,4 +1,4 @@
-const CACHE='rp-v9.12.3-header-motto-animation';
+const CACHE='rp-v9.12.4-header-motto-visible-animation';
 const ASSETS=[
   './',
   './index.html',
