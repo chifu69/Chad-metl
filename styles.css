@@ -397,24 +397,6 @@ html,body{max-width:100%;overflow-x:hidden}
 
 
 /* v9.12.2 header motto + compact Assigned Work KPI */
-.rp-header-motto{
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-  gap:1px;
-  margin-left:auto;
-  margin-right:10px;
-  min-width:max-content;
-  text-align:center;
-  font-size:.58rem;
-  line-height:1.05;
-  font-weight:900;
-  letter-spacing:.08em;
-  color:#fff;
-  opacity:.92;
-}
-.rp-header-motto span{display:block}
-
 .assigned-work-metric{
   appearance:none;
   border:1px solid var(--line);
@@ -449,18 +431,62 @@ html,body{max-width:100%;overflow-x:hidden}
 }
 .assigned-work-metric:active{transform:scale(.99)}
 
+
+
+/* v9.12.3 professional animated header motto */
+.rp-header-motto{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  gap:2px;
+  margin-left:auto;
+  margin-right:12px;
+  min-width:92px;
+  max-width:112px;
+  text-align:center;
+  color:#fff;
+  font-size:.58rem;
+  line-height:1.05;
+  font-weight:900;
+  letter-spacing:.10em;
+  white-space:nowrap;
+  opacity:.96;
+  animation:rpMottoEnter .7s ease-out both, rpMottoPulse 5.5s ease-in-out 1.2s infinite;
+}
+.rp-header-motto span{
+  display:block;
+  width:100%;
+  overflow:visible;
+  text-overflow:clip;
+}
+@keyframes rpMottoEnter{
+  from{opacity:0;transform:translateY(-4px) scale(.98)}
+  to{opacity:.96;transform:translateY(0) scale(1)}
+}
+@keyframes rpMottoPulse{
+  0%,84%,100%{opacity:.92;transform:translateY(0) scale(1);text-shadow:none}
+  90%{opacity:1;transform:translateY(-1px) scale(1.015);text-shadow:0 0 8px rgba(255,255,255,.28)}
+  96%{opacity:.98;transform:translateY(0) scale(1.005);text-shadow:0 0 4px rgba(255,255,255,.16)}
+}
 @media(max-width:700px){
   .rp-header-motto{
-    font-size:.50rem;
+    min-width:78px;
+    max-width:84px;
     margin-right:6px;
-    max-width:78px;
-    white-space:nowrap;
+    font-size:.48rem;
+    letter-spacing:.06em;
   }
 }
 @media(max-width:430px){
   .rp-header-motto{
-    font-size:.45rem;
+    min-width:72px;
+    max-width:76px;
+    margin-right:4px;
+    font-size:.43rem;
     letter-spacing:.04em;
-    max-width:70px;
   }
+}
+@media(prefers-reduced-motion:reduce){
+  .rp-header-motto{animation:none}
 }

@@ -1,4 +1,4 @@
-const CACHE='rp-v9.12.2-dashboard-header-chat-fix';
+const CACHE='rp-v9.12.3-header-motto-animation';
 const ASSETS=[
   './',
   './index.html',
