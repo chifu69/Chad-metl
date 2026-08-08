@@ -1,4 +1,4 @@
-const CACHE='rp-v9.12.0-assigned-assessments-version-motto';
+const CACHE='rp-v9.12.1-platform-visibility-fix';
 const ASSETS=[
   './',
   './index.html',

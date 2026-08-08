@@ -1,7 +1,7 @@
 /* RP Enterprise Platform v8.0 — architecture and experience layer */
 (function(){
   'use strict';
-  const VERSION='9.10.0';
+  const VERSION='9.12.1';
   const $q=(s,r=document)=>r.querySelector(s);
   const $$q=(s,r=document)=>[...r.querySelectorAll(s)];
   const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
@@ -278,12 +278,100 @@
     $q('#fullBrainAsk').onclick=run;$q('#fullBrainQuestion').onkeydown=e=>{if(e.key==='Enter')run()};$$q('.quick-prompts button').forEach(b=>b.onclick=()=>{$q('#fullBrainQuestion').value=b.textContent;run()});$q('#brainBackDashboard').onclick=()=>navigate('dashboard');
   };
 
+
+  /* v9.12.1: keep v9.12 dashboard additions after the enterprise platform replaces dashboard. */
+  const rpEnterpriseDashboardBase=window.dashboard;
+  window.dashboard=function(){
+    rpEnterpriseDashboardBase();
+
+    const main=$q('#main');
+    if(!main)return;
+
+    // Visible operational motto.
+    if(!main.querySelector('.rp-dashboard-motto')){
+      const motto=document.createElement('div');
+      motto.className='rp-dashboard-motto';
+      motto.innerHTML='<span>RUN LIKE NEW</span><span>LOOK LIKE NEW</span>';
+      const footer=main.querySelector('.rp-version-footer');
+      if(footer)main.insertBefore(motto,footer);
+      else main.appendChild(motto);
+    }
+
+    // Assigned assessment work for the signed-in user.
+    const all=(state.assessmentAssignments||[]).filter(a=>!['Completed','Cancelled'].includes(a.status));
+    let rows=[],heading='',message='';
+
+    if(currentUser?.role==='viewer'){
+      rows=all.filter(a=>String(a.employeeNumber||'')===String(currentUser.employeeNumber||''));
+      heading='My Assigned Assessments';
+      message=rows.length?'You have training or assessment work assigned.':'You have no assigned assessments right now.';
+    }else if(currentUser?.role==='evaluator'){
+      rows=all.filter(a=>String(a.evaluatorUsername||'').toLowerCase()===String(currentUser.username||'').toLowerCase());
+      heading='Assessments Assigned to Me';
+      message=rows.length?'Associates are waiting for evaluation.':'You have no assigned evaluations right now.';
+    }else if(currentUser?.role==='admin'){
+      rows=all;
+      heading='Assigned Assessment Work';
+      message=rows.length?'Training and evaluations are currently assigned.':'There are no active assessment assignments.';
+    }
+
+    if(heading&&!main.querySelector('.dashboard-assignment-card')){
+      const card=document.createElement('div');
+      card.className='card dashboard-assignment-card';
+      card.innerHTML=`
+        <div class="section-heading">
+          <div>
+            <small>ASSIGNED ASSESSMENTS</small>
+            <h3>${escV(heading)}</h3>
+            <p>${escV(message)}</p>
+          </div>
+          <span class="assignment-dashboard-count">${rows.length}</span>
+        </div>
+        ${rows.slice(0,4).map(a=>{
+          const p=assignmentPerson(a)||{};
+          const t=assignmentTask(a)||{};
+          const status=assignmentStatus(a);
+          return `<button class="list-link dashboardAssignmentOpen" data-id="${escV(a.id)}">
+            <span>
+              <b>${currentUser.role==='viewer'
+                ?escV(t.id||a.taskId)+' — '+escV(t.name||a.taskName)
+                :escV(p.name||a.employeeName)+' — '+escV(t.id||a.taskId)}</b>
+              <small>${currentUser.role==='evaluator'
+                ?`Due ${escV(a.dueDate||'')} · ${escV(t.name||a.taskName||'')}`
+                :`Evaluator: ${escV(a.evaluatorName||'')} · Due ${escV(a.dueDate||'')}`}</small>
+            </span>
+            <span class="pill ${status==='Overdue'?'critical':status==='Due Today'?'nogo':'ne'}">${escV(status)}</span>
+          </button>`;
+        }).join('')}
+        <div class="actions">
+          ${currentUser?.role==='admin'?'<button class="primary" id="dashboardAssignNew">Assign Assessment</button>':''}
+          <button class="secondary" id="openAllAssignments">Open Assigned Assessments</button>
+        </div>`;
+
+      const head=main.querySelector('.page-head');
+      if(head&&head.nextSibling)main.insertBefore(card,head.nextSibling);
+      else main.prepend(card);
+
+      $$q('.dashboardAssignmentOpen').forEach(b=>b.onclick=()=>{
+        const a=(state.assessmentAssignments||[]).find(x=>String(x.id)===String(b.dataset.id));
+        if(!a)return;
+        if(currentUser.role==='viewer')navigate('assignments');
+        else openAssignedAssessment(a.id);
+      });
+      const allBtn=$q('#openAllAssignments');
+      if(allBtn)allBtn.onclick=()=>navigate('assignments');
+      const newBtn=$q('#dashboardAssignNew');
+      if(newBtn)newBtn.onclick=createAssessmentAssignment;
+    }
+  };
+
   /* Replace navigation with user modules only; engines stay invisible. */
   window.navDefs=[
     ['dashboard','Dashboard','Inicio'],
     ['personnel','Personnel','Personal'],
     ['tasks','METL & Subtasks','METL y subtareas'],
     ['matrix','Readiness Matrix','Matriz de preparación'],
+    ['assignments','Assigned Assessments','Evaluaciones asignadas'],
     ['assessments','Assessments','Evaluaciones'],
     ['actions','Corrective Actions','Acciones correctivas'],
     ['knowledge','Knowledge Center','Centro de conocimiento'],
@@ -295,12 +383,12 @@
   ];
   window.renderNav=function(){
     const allowed=window.navDefs.filter(x=>{if(['settings','enterprise'].includes(x[0]))return currentUser.role==='admin';if(x[0]==='audit')return currentUser.role==='admin'||currentUser.role==='evaluator';return true});
-    $q('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}</div>`;
+    $q('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}<small>v9.12.1</small></div>`;
     $$q('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view));
   };
   window.navigate=function(v){
     view=v;trackInterest(v,1);$$q('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));$q('#nav').classList.remove('open');$q('#navScrim').classList.remove('open');
-    const routes={dashboard,personnel,tasks,matrix:matrixView,assessments:assessmentsUnifiedView,actions,knowledge:knowledgeCenterView,notifications:notificationView,audit:auditView,profile:myProfile,settings,enterprise:enterpriseToolsView,backup:backupRestoreView,intelligence:metlIntelligence};
+    const routes={dashboard,personnel,tasks,matrix:matrixView,assignments:assignmentView,assessments:assessmentsUnifiedView,actions,knowledge:knowledgeCenterView,notifications:notificationView,audit:auditView,profile:myProfile,settings,enterprise:enterpriseToolsView,backup:backupRestoreView,intelligence:metlIntelligence};
     try{(routes[v]||dashboard)()}catch(err){console.error('RP view error',v,err);log('ERROR','Navigation',`Unable to open ${v}`,err.message||String(err));page('Unable to open this view','The rest of RP is still available.',`<div class="card"><h3>View error</h3><p>${escV(err?.message||'Unknown error')}</p><button class="primary" id="returnDashboard">Return to dashboard</button></div>`);$q('#returnDashboard').onclick=()=>navigate('dashboard')}
   };
 
