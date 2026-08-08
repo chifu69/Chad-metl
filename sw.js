@@ -1,4 +1,4 @@
-const CACHE='rp-v9.11.0-assigned-assessments';
+const CACHE='rp-v9.12.0-assigned-assessments-version-motto';
 const ASSETS=[
   './',
   './index.html',

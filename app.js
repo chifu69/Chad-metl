@@ -122,8 +122,9 @@ function login(){const name=$('#username').value.trim().toLowerCase(),pwd=$('#pi
 function changePassword(){const a=$('#newPassword').value,b=$('#confirmPassword').value;if(a.length<6)return toast('Use at least 6 characters');if(a!==b)return toast('Passwords do not match');if(a===pendingUser.password)return toast('Choose a different password');pendingUser.password=a;pendingUser.mustChange=false;saveUsers();$('#passwordModal').classList.add('hidden');completeLogin(pendingUser)}
 function completeLogin(u){currentUser=u;uiLanguage=u.language||uiLanguage;applyLanguage(uiLanguage,false);$('#login').classList.add('hidden');$('#app').classList.remove('hidden');$('#serverConfigBtn')?.classList.toggle('hidden',u.role!=='admin');$('#roleBadge').textContent=u.role==='admin'?' · Administrator':u.role==='viewer'?' · Read only':` · Approved Evaluator ${u.maxLevel}`;renderNav();navigate('dashboard')}
 function logout(){currentUser=null;$('#serverConfigBtn')?.classList.add('hidden');$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#pin').value='';$('#username').focus()}
+const RP_VERSION='9.12.0';
 const navDefs=[['dashboard','Dashboard','Inicio'],['intelligence','Eagle','Eagle'],['personnel','Personnel','Personal'],['tasks','METL & Subtasks','METL y subtareas'],['matrix','Readiness Matrix','Matriz de preparación'],['assignments','Assigned Assessments','Evaluaciones asignadas'],['assess','Assessment','Evaluación'],['sessions','Assessment History','Historial de evaluaciones'],['actions','Corrective Actions','Acciones correctivas'],['notifications','Notifications','Notificaciones'],['audit','Audit Trail','Auditoría'],['plant','Plant Intelligence','Inteligencia de planta'],['knowledge','Knowledge Center','Centro de conocimiento'],['engines','Engine Center','Centro de motores'],['profile','My Profile','Mi perfil'],['settings','Administration','Administración']];
-function renderNav(){const allowed=navDefs.filter(x=>{if(x[0]==='settings')return currentUser.role==='admin';if(x[0]==='assess')return canEvaluate();if(x[0]==='audit')return currentUser.role==='admin'||currentUser.role==='evaluator';return true});$('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}</div>`;$$('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view))}
+function renderNav(){const allowed=navDefs.filter(x=>{if(x[0]==='settings')return currentUser.role==='admin';if(x[0]==='assess')return canEvaluate();if(x[0]==='audit')return currentUser.role==='admin'||currentUser.role==='evaluator';return true});$('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}<small>v${RP_VERSION}</small></div>`;$$('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view))}
 function navigate(v){
   view=v;
   trackInterest(v,1);
@@ -156,7 +157,7 @@ function navigate(v){
     $('#returnDashboard').onclick=()=>navigate('dashboard');
   }
 }
-function page(title,sub,body,acts=''){$('#main').innerHTML=`<div class="page-head"><div><h1>${title}</h1><p>${sub}</p></div><div class="actions">${acts}</div></div>${body}`}
+function page(title,sub,body,acts=''){$('#main').innerHTML=`<div class="page-head"><div><h1>${title}</h1><p>${sub}</p></div><div class="actions">${acts}</div></div>${body}<footer class="rp-version-footer">RP v${RP_VERSION}</footer>`}
 function activePeople(){return state.personnel.filter(p=>p.name&&p.employeeNumber&&p.status!=='Inactive')}
 function latestResults(emp=null){const map=new Map();state.results.filter(r=>!emp||r.employeeNumber===emp).forEach(r=>{const key=r.employeeNumber+'|'+r.subtaskId,old=map.get(key);const d=r.date||state.sessions.find(s=>s.id===r.sessionId)?.date||'';if(!old||d>old._date)map.set(key,{...r,_date:d})});return map}
 function personMetrics(p){const applicable=state.subtasks.filter(s=>s.status==='Active'&&levelRank[s.requiredLevel]<=levelRank[p.assignedLevel]);const latest=latestResults(p.employeeNumber);let go=0,nogo=0,assist=0,expired=0,critical=0;for(const s of applicable){const r=latest.get(p.employeeNumber+'|'+s.id);if(r?.result==='GO')go++;else if(r?.result==='NO-GO'){nogo++;if(s.criticality==='Critical Gate')critical++}else if(r?.result==='REQUIRES ASSISTANCE')assist++;else if(r?.result==='EXPIRED')expired++}const pct=applicable.length?Math.round(go/applicable.length*100):0;const open=state.actions.filter(a=>a.employeeNumber===p.employeeNumber&&a.status!=='Closed').length;let highest='None';for(const lv of ['-10','-20','-30','-40']){const req=state.subtasks.filter(s=>s.status==='Active'&&levelRank[s.requiredLevel]<=levelRank[lv]);const ok=req.length&&req.every(s=>latest.get(p.employeeNumber+'|'+s.id)?.result==='GO');if(ok)highest=lv}return{applicable:applicable.length,go,nogo,assist,expired,critical,open,pct,highest}}
@@ -205,6 +206,15 @@ function dashboard(){if(currentUser?.role==='viewer'){const p=state.personnel.fi
 const rpDashboardBase=dashboard;
 dashboard=function(){
   rpDashboardBase();
+
+  const main=$('#main');
+  if(main){
+    const motto=document.createElement('div');
+    motto.className='rp-dashboard-motto';
+    motto.innerHTML='<span>RUN LIKE NEW</span><span>LOOK LIKE NEW</span>';
+    const footer=main.querySelector('.rp-version-footer');
+    if(footer)main.insertBefore(motto,footer); else main.appendChild(motto);
+  }
 
   const all=(state.assessmentAssignments||[]).filter(a=>!['Completed','Cancelled'].includes(a.status));
   let rows=[],heading='',message='';

@@ -386,3 +386,11 @@ html,body{max-width:100%;overflow-x:hidden}
 @media(max-width:600px){
   .assignment-grid{grid-template-columns:1fr}
 }
+
+
+/* RP v9.12.0 identification + dashboard standard */
+.rp-version-footer{margin:28px 0 calc(18px + env(safe-area-inset-bottom));text-align:center;color:var(--muted,#64748b);font-size:12px;font-weight:800;letter-spacing:.12em;opacity:.8}
+.nav-footer small{display:block;margin-top:4px;font-size:11px;letter-spacing:.08em;opacity:.7}
+.rp-dashboard-motto{margin:24px 0 8px;padding:18px 20px;border:1px solid rgba(100,116,139,.22);border-radius:22px;text-align:center;background:rgba(255,255,255,.7);font-weight:900;letter-spacing:.12em;color:#0b1d35;display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
+.rp-dashboard-motto span+span:before{content:'•';margin-right:12px;opacity:.45}
+@media(max-width:520px){.rp-dashboard-motto{font-size:13px}.rp-dashboard-motto span+span:before{content:'';margin:0}.rp-dashboard-motto span{width:100%}}
