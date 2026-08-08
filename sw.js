@@ -1,4 +1,4 @@
-const CACHE='rp-v9.9.2-assessment-search-admin-export-fix';
+const CACHE='rp-v9.10.0-assessment-permissions-backup';
 const ASSETS=[
   './',
   './index.html',
