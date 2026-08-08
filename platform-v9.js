@@ -1,7 +1,7 @@
 /* RP Enterprise Platform v8.0 — architecture and experience layer */
 (function(){
   'use strict';
-  const VERSION='9.23.0';
+  const VERSION='9.23.1';
   const $q=(s,r=document)=>r.querySelector(s);
   const $$q=(s,r=document)=>[...r.querySelectorAll(s)];
   const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
@@ -133,6 +133,50 @@
     const d=new Date(), key=d.getFullYear()*372+(d.getMonth()+1)*31+d.getDate()+seed;
     return motivationLines[Math.abs(key)%motivationLines.length];
   }
+  function assignmentRowsForCurrentUser(){
+    const active=(state.assessmentAssignments||state.assignedAssessments||[]).filter(a=>!['Completed','Cancelled'].includes(a.status));
+    if(currentUser?.role==='viewer')return active.filter(a=>String(a.employeeNumber||'')===String(currentUser?.employeeNumber||''));
+    if(currentUser?.role==='evaluator')return active.filter(a=>String(a.evaluatorUsername||'').toLowerCase()===String(currentUser?.username||'').toLowerCase());
+    return active;
+  }
+  function recentFocusLabel(){
+    try{
+      const rows=typeof brainTop==='function'?brainTop():[];
+      const labels={assignments:'assigned assessments',assessments:'assessments',actions:'corrective actions',matrix:'readiness matrix',personnel:'personnel',tasks:'METL tasks',knowledge:'knowledge center',audit:'audit trail',notifications:'notifications'};
+      const hit=rows.find(x=>labels[x?.[0]]);
+      return hit?labels[hit[0]]:'';
+    }catch{return ''}
+  }
+  function chooseFreshBriefing(candidates){
+    const clean=[...new Set(candidates.filter(Boolean))];
+    if(!clean.length)return 'Eagle is watching the current readiness picture and is ready for the next decision.';
+    const key=`rpia-dashboard-briefing-${currentUser?.username||'user'}`;
+    let recent=[];try{recent=JSON.parse(localStorage.getItem(key)||'[]')}catch{}
+    const available=clean.filter(x=>!recent.includes(x));
+    const pool=available.length?available:clean;
+    const pick=pool[Math.floor(Math.random()*pool.length)];
+    recent=[pick,...recent.filter(x=>x!==pick)].slice(0,4);
+    try{localStorage.setItem(key,JSON.stringify(recent))}catch{}
+    return pick;
+  }
+  function operationalBriefingLine({readiness,critical,open,overdue,due,ready,assignments,weakest}){
+    const candidates=[];
+    if(critical.length){
+      candidates.push(`${critical.length} Critical Gate issue${critical.length===1?' is':'s are'} driving today’s priority.`);
+      candidates.push(`Safety is leading the briefing: ${critical.length} Critical Gate issue${critical.length===1?' needs':'s need'} attention.`);
+    }
+    if(overdue.length)candidates.push(`${overdue.length} corrective action${overdue.length===1?' is':'s are'} overdue and should be reviewed next.`);
+    if(assignments.length)candidates.push(`${assignments.length} assigned assessment${assignments.length===1?' is':'s are'} waiting in the current workload.`);
+    if(due.length)candidates.push(`${due.length} reassessment${due.length===1?' is':'s are'} coming up; qualification currency is worth checking.`);
+    if(weakest)candidates.push(`${weakest.shift} Shift is currently the lowest readiness area at ${weakest.pct}%.`);
+    if(open.length&&!overdue.length)candidates.push(`${open.length} open corrective action${open.length===1?' is':'s are'} active and currently on schedule.`);
+    if(ready)candidates.push(`${ready} associate${ready===1?' is':'s are'} fully ready based on the records currently loaded.`);
+    if(readiness>=85)candidates.push(`Overall readiness is ${readiness}% and the operation is currently tracking stable.`);
+    else candidates.push(`Overall readiness is ${readiness}%; Eagle is prioritizing the gaps that can move it forward.`);
+    const focus=recentFocusLabel();
+    if(focus)candidates.push(`Your recent focus has been ${focus}; Eagle is keeping that context in view.`);
+    return chooseFreshBriefing(candidates);
+  }
   function eaglePersonalGreeting(seed=0){
     const h=new Date().getHours(), part=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
     return `${part}, ${escV(firstName())}. ${escV(motivationalLine(seed))}`;
@@ -177,12 +221,14 @@
     if(weakest)missions.push({tone:'blue',icon:'↗',title:`Strengthen ${weakest.shift} Shift readiness`,detail:`Current readiness is ${weakest.pct}%.`,target:'matrix'});
     if(due.length)missions.push({tone:'violet',icon:'✓',title:`Complete ${due.length} upcoming reassessment${due.length===1?'':'s'}`,detail:'Keep qualifications current and traceable.',target:'assessments'});
     if(!missions.length)missions.push({tone:'green',icon:'✓',title:'No urgent compliance issues',detail:'Review upcoming assessments and development opportunities.',target:'assessments'});
+    const assignments=assignmentRowsForCurrentUser();
     const status=critical.length||overdue.length?'Attention Required':readiness>=85?'Stable':'Developing';
     const statusTone=critical.length?'red':overdue.length?'amber':readiness>=85?'green':'blue';
+    const briefingLine=operationalBriefingLine({readiness,critical,open,overdue,due,ready,assignments,weakest});
     page('Dashboard','',`
       <section class="command-hero ${statusTone}">
-        <div class="command-greeting"><span class="eyebrow">Eagle Operational Briefing</span><h1>${greeting}, ${userName}.</h1><p>${escV(motivationalLine())}</p><p class="eagle-personal-insight">${dashboardPersonalInsight(metrics,open,critical,due)}</p></div>
-        <div class="command-status"><small>Plant status</small><b>${status}</b><span>Last analysis ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span></div>
+        <div class="command-greeting"><span class="eyebrow">Eagle Operational Briefing · Live</span><h1>${greeting}, ${userName}.</h1><p class="eagle-live-line">${escV(briefingLine)}</p><p class="eagle-personal-insight">${dashboardPersonalInsight(metrics,open,critical,due)}</p></div>
+        <div class="command-status"><small>Plant status</small><b>${status}</b><span>Live analysis · ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span></div>
       </section>
       <section class="command-summary">
         <button class="command-metric readiness" data-target="matrix"><span>Readiness</span><b>${readiness}%</b><em>${readiness>=85?'On track':'Needs development'}</em></button>
@@ -338,46 +384,10 @@
     /* Remove any old dashboard motto that may still exist near the bottom. */
     main.querySelectorAll('.rp-dashboard-motto').forEach(el=>el.remove());
 
-    /* Assigned assessments count shown as a normal dashboard metric card. */
-    const activeAssignments=(state.assessmentAssignments||[]).filter(a=>!['Completed','Cancelled'].includes(a.status));
-
-    let rows=activeAssignments;
-    if(currentUser?.role==='viewer'){
-      rows=activeAssignments.filter(a=>String(a.employeeNumber||'')===String(currentUser.employeeNumber||''));
-    }else if(currentUser?.role==='evaluator'){
-      rows=activeAssignments.filter(a=>String(a.evaluatorUsername||'').toLowerCase()===String(currentUser.username||'').toLowerCase());
-    }
-
-    /* Remove the previous large Assigned Assessment Work card if present. */
-    main.querySelectorAll('.dashboard-assignment-card').forEach(el=>el.remove());
-
-    /* Find the KPI/stat grid used by Readiness, Critical Gates, Open Actions, Reassessments, Fully Ready. */
-    const metricCandidates=[...main.querySelectorAll('.metric-grid, .stats-grid, .dashboard-grid, .grid')];
-    let metricGrid=metricCandidates.find(g=>{
-      const txt=(g.textContent||'').toLowerCase();
-      return txt.includes('readiness') && txt.includes('critical gates') && txt.includes('fully ready');
-    });
-
-    if(!metricGrid){
-      const fullyReady=[...main.querySelectorAll('*')].find(el=>{
-        const txt=(el.textContent||'').trim().toLowerCase();
-        return txt==='fully ready';
-      });
-      metricGrid=fullyReady?.closest('.metric-grid, .stats-grid, .dashboard-grid, .grid')||fullyReady?.parentElement?.parentElement||null;
-    }
-
-    if(metricGrid && !metricGrid.querySelector('.assigned-work-metric')){
-      const card=document.createElement('button');
-      card.type='button';
-      card.className='assigned-work-metric';
-      card.innerHTML=`
-        <span class="assigned-work-label">Assigned Work</span>
-        <strong>${rows.length}</strong>
-        <span class="assigned-work-sub">${rows.length===1?'Pending Assessment':'Pending Assessments'}</span>
-      `;
-      card.onclick=()=>navigate('assignments');
-      metricGrid.appendChild(card);
-    }
+    /* v9.23.1: Assigned Assessments stay in the navigation workflow.
+       The large dashboard Assigned Work tile was intentionally removed to keep
+       the command center focused on live operational priorities. */
+    main.querySelectorAll('.dashboard-assignment-card,.assigned-work-metric').forEach(el=>el.remove());
   };
 
 
@@ -401,7 +411,7 @@
   ];
   window.renderNav=function(){
     const allowed=window.navDefs.filter(x=>{if(['settings','enterprise'].includes(x[0]))return currentUser.role==='admin';if(x[0]==='audit')return currentUser.role==='admin'||currentUser.role==='evaluator';return true});
-    $q('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}<small>v9.23.0</small></div>`;
+    $q('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}<small>v9.23.1</small></div>`;
     $$q('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view));
   };
   window.navigate=function(v){

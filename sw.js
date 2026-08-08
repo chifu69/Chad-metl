@@ -1,4 +1,4 @@
-const CACHE='rp-v9.23.0-eagle-personal-experience';
+const CACHE='rp-v9.23.1-eagle-personal-experience';
 const ASSETS=[
   './eagle-controller.js',
   './',
