@@ -1,4 +1,4 @@
-/* RP Eagle Natural Language Max v9.24.0
+/* RP Eagle Natural Language Max v9.24.1
    Deterministic local NLU, no LLM.
    Pipeline:
    normalize -> dictionary expansion -> dialogue control -> identity/context
@@ -7,7 +7,7 @@
 */
 (function(){
   'use strict';
-  const VERSION='9.24.0';
+  const VERSION='9.24.1';
 
   const $one=(s,r=document)=>r.querySelector(s);
   const $all=(s,r=document)=>[...r.querySelectorAll(s)];
@@ -167,7 +167,8 @@
 
     const relationship=!!recipient && (
       hasConcept(text,'assign') ||
-      (hasConcept(text,'create')&&(forPos>=0||toPos>=0))
+      (hasConcept(text,'create')&&(forPos>=0||toPos>=0)) ||
+      (hasConcept(text,'assessment')&&(forPos>=0||toPos>=0))
     );
     return{actor:currentUser||null,recipient,evaluator,task,subtask,assignmentRelationship:relationship};
   }
@@ -229,11 +230,27 @@
     {id:'knowledge.list',family:'knowledge',score:p=>p.knowledgeBrowse?900:0},
     {id:'readiness.readyCandidates',family:'readiness',score:p=>p.globalWhoReady?880:0},
 
-    {id:'assignment.create',family:'assignment',score:p=>
-      (p.assign?300:0)+(p.assignment?220:0)+(p.assessment&&p.assign?150:0)+(p.roles.assignmentRelationship?400:0)+
-      ((p.taskConcept||p.task||p.subtaskConcept||p.subtask)&&p.roles.recipient?180:0)-
-      (p.create&&p.taskConcept&&!p.roles.recipient&&!p.assign?380:0)
-    },
+    {id:'assignment.create',family:'assignment',score:p=>{
+      let s=0;
+      if(p.assign)s+=320;
+      if(p.assignment)s+=240;
+      if(p.assessment&&(p.assign||p.create))s+=320;
+      if(p.roles.assignmentRelationship)s+=420;
+      if((p.taskConcept||p.task||p.subtaskConcept||p.subtask)&&p.roles.recipient)s+=200;
+      if(p.assessment&&p.person)s+=260;
+      if(p.assignment&&p.person)s+=200;
+      if(p.person)s+=80;
+      if(p.evaluator)s+=40;
+      if(p.task||p.subtask)s+=70;
+
+      // Crucial: "Add/Create assessment to/for Luis" is an assignment, not a person lookup.
+      if((p.create||p.assign)&&p.assessment&&p.person)s+=450;
+
+      // Pure METL authoring remains METL only when no recipient exists.
+      if(p.create&&p.taskConcept&&!p.roles.recipient&&!p.assign&&!p.assessment)s-=420;
+      if(p.create&&p.subtaskConcept&&!p.roles.recipient&&!p.assign&&!p.assessment)s-=440;
+      return s;
+    }},
     {id:'metl.subtask.create',family:'metl',score:p=>p.create&&p.subtaskConcept&&!p.roles.recipient?520:0},
     {id:'metl.task.create',family:'metl',score:p=>p.create&&p.taskConcept&&!p.roles.recipient?500:0},
     {id:'metl.subtask.edit',family:'metl',score:p=>p.edit&&p.subtaskConcept?480:0},
@@ -261,7 +278,7 @@
     {id:'metl.task.info',family:'metl',score:p=>p.taskConcept?240:0},
     {id:'person.create',family:'personnel',score:p=>p.create&&p.employeeConcept?430:0},
     {id:'person.edit',family:'personnel',score:p=>p.edit&&p.employeeConcept?420:0},
-    {id:'person.summary',family:'personnel',score:p=>p.person?200:0},
+    {id:'person.summary',family:'personnel',score:p=>p.person&&!p.assessment&&!p.assignment&&!p.create&&!p.assign?200:0},
 
     {id:'system.backup',family:'system',score:p=>p.backup?400:0},
     {id:'system.notifications',family:'system',score:p=>/\b(notification|notifications|alerts)\b/.test(p.text)?340:0},
@@ -603,6 +620,12 @@
   }};
 
   const TESTS=[
+    ['Add assessment to Luis','assignment.create'],
+    ['Add assessment for Luis','assignment.create'],
+    ['Create assessment for Luis','assignment.create'],
+    ['Create an assessment to Luis','assignment.create'],
+    ['Add evaluation to Luis','assignment.create'],
+    ['Schedule evaluation for Luis','assignment.create'],
     ['Who am I','identity.self'],
     ['What is my role','identity.self'],
     ['What level am I','identity.self'],

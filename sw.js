@@ -1,4 +1,4 @@
-const CACHE='rp-v9.24.0-eagle-natural-language-max';
+const CACHE='rp-v9.24.1-eagle-assessment-intent-name-fix';
 const ASSETS=[
   './eagle-controller.js',
   './',
