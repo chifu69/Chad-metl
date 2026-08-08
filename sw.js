@@ -1,4 +1,4 @@
-const CACHE='rp-v9.12.1-platform-visibility-fix';
+const CACHE='rp-v9.12.2-dashboard-header-chat-fix';
 const ASSETS=[
   './',
   './index.html',
