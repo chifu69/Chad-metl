@@ -1,4 +1,4 @@
-/* RP Eagle Brain Rebuild v9.21.0
+/* RP Eagle Brain Rebuild v9.22.0
    Architecture:
    USER -> EAGLE -> Intent + Entities + Conversation Context
         -> Permission Gate -> Engine Plan -> Existing RP Workflow / Answer
@@ -9,7 +9,7 @@
 (function(){
   'use strict';
 
-  const VERSION='9.21.0';
+  const VERSION='9.22.0';
   const $one=(sel,root=document)=>root.querySelector(sel);
   const $all=(sel,root=document)=>[...root.querySelectorAll(sel)];
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -363,11 +363,22 @@
 
   function applyConversationContext(parsed,intent){
     const c=loadContext();
+    const personSensitive=['development.advancement','readiness.person','assessment.history','corrective.list'];
+    const signedInPerson=currentPerson();
 
-    // Follow-up context is used only when the current sentence does not provide an entity.
-    if(!parsed.person&&c.employeeNumber){
+    // Identity firewall: first-person language always refers to the signed-in account.
+    // A previously discussed/selected associate must never silently become “me”.
+    if(parsed.self&&personSensitive.includes(intent.id)){
+      parsed.person=signedInPerson||null;
+      parsed.subjectSource=signedInPerson?'signed-in-user':'signed-in-user-unlinked';
+    }else if(parsed.person){
+      parsed.subjectSource='explicit';
+    }else if(c.employeeNumber){
+      // Conversation subject is allowed only when the new request is not self-referential.
       parsed.person=activePeople().find(p=>String(p.employeeNumber)===String(c.employeeNumber))||null;
+      if(parsed.person)parsed.subjectSource='conversation';
     }
+
     if(!parsed.task&&c.taskId){
       parsed.task=activeTasks().find(t=>String(t.id)===String(c.taskId))||null;
     }
@@ -375,15 +386,13 @@
       parsed.subtask=activeSubtasks().find(s=>String(s.id)===String(c.subtaskId))||null;
     }
 
-    // Self-referential development/readiness/history defaults to signed-in associate.
-    if(!parsed.person&&parsed.self&&['development.advancement','readiness.person','assessment.history','corrective.list'].includes(intent.id)){
-      parsed.person=currentPerson();
-    }
-    if(!parsed.person&&['development.advancement','readiness.person'].includes(intent.id)){
-      parsed.person=currentPerson();
+    // Non-self readiness can default to the signed-in associate only when no conversation subject exists.
+    if(!parsed.person&&!parsed.self&&['development.advancement','readiness.person'].includes(intent.id)&&signedInPerson){
+      parsed.person=signedInPerson;
+      parsed.subjectSource='signed-in-default';
     }
 
-    if(parsed.person)c.employeeNumber=parsed.person.employeeNumber;
+    if(parsed.person&&!parsed.self)c.employeeNumber=parsed.person.employeeNumber;
     if(parsed.task)c.taskId=parsed.task.id;
     if(parsed.subtask)c.subtaskId=parsed.subtask.id;
     if(parsed.evaluator)c.evaluatorUsername=parsed.evaluator.username;
@@ -432,8 +441,12 @@
       <button class="secondary eagle-action-btn" data-action="person" data-emp="${esc(person.employeeNumber)}">Open employee profile</button>`;
   }
 
-  function advancementAnswer(person){
-    if(!person)return'<p>I need an associate to answer that. If this is about you, make sure your login is linked to an employee record.</p>';
+  function advancementAnswer(person,parsed={}){
+    if(!person&&parsed.self){
+      const role=currentUser?.role==='admin'?'System Administrator':currentUser?.role==='evaluator'?'Evaluator':'signed-in user';
+      return `<h3>${esc(currentUser?.name||role)}</h3><p>You are signed in as <b>${esc(role)}</b>, but this account is not linked to an associate competency record. I will not use a previously viewed employee as your identity.</p><p>Ask about a specific associate, for example <b>What does Luis need to move to the next level?</b></p>`;
+    }
+    if(!person)return'<p>Which associate do you want me to review? Give me the employee name or number.</p>';
     const levels=['-10','-20','-30','-40'];
     const idx=levels.indexOf(person.assignedLevel||'-10');
     const next=idx>=0&&idx<levels.length-1?levels[idx+1]:null;
@@ -448,7 +461,7 @@
       <p><b>Current readiness:</b> ${m.pct}% · <b>${gaps.length}</b> requirement${gaps.length===1?'':'s'} not currently recorded GO for the next level.</p>
       ${actions.length?`<p><b>${actions.length} open corrective action${actions.length===1?'':'s'}</b> should be addressed.</p>`:''}
       ${assigned.length?`<p><b>${assigned.length} assigned assessment${assigned.length===1?'':'s'}</b> already scheduled.</p>`:''}
-      ${gaps.length?`<div class="eagle-mini-list">${gaps.slice(0,8).map(s=>`<div><b>${esc(s.id)}</b><span>${esc(s.name)}</span></div>`).join('')}</div>`:'<p>No missing GO requirements are visible for the next level.</p>'}
+      ${gaps.length?`<p><b>Next priorities:</b></p><div class="eagle-mini-list">${[...gaps].sort((a,b)=>(b.criticality==='Critical Gate')-(a.criticality==='Critical Gate')).slice(0,5).map(s=>`<div><b>${esc(s.id)}</b><span>${esc(s.name)}${s.criticality==='Critical Gate'?' · Critical Gate':''}</span></div>`).join('')}</div>${gaps.length>5?`<p><small>Showing 5 of ${gaps.length} remaining requirements.</small></p>`:''}`:'<p>No missing GO requirements are visible for the next level.</p>'}
       <button class="secondary eagle-action-btn" data-action="person" data-emp="${esc(person.employeeNumber)}">Open employee profile</button>`;
   }
 
@@ -568,7 +581,7 @@
       case'person.summary':return personSummary(parsed.person);
       case'system.personnel':return'<button class="primary eagle-action-btn" data-action="nav" data-view="personnel">Open Personnel</button>';
 
-      case'development.advancement':return advancementAnswer(parsed.person);
+      case'development.advancement':return advancementAnswer(parsed.person,parsed);
       case'readiness.person':return personSummary(parsed.person||currentPerson());
       case'readiness.group':return readinessGroup(parsed);
       case'corrective.list':return correctiveAnswer(parsed);
