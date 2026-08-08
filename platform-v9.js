@@ -1,7 +1,7 @@
 /* RP Enterprise Platform v8.0 — architecture and experience layer */
 (function(){
   'use strict';
-  const VERSION='9.22.0';
+  const VERSION='9.23.0';
   const $q=(s,r=document)=>r.querySelector(s);
   const $$q=(s,r=document)=>[...r.querySelectorAll(s)];
   const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
@@ -120,6 +120,36 @@
     }
   };
 
+  const motivationLines=[
+    'Let’s make today count.',
+    'Ready when you are.',
+    'Another opportunity to get better.',
+    'Strong work starts with the next right step.',
+    'Progress is built one standard at a time.',
+    'Run like new. Look like new.'
+  ];
+  function firstName(){return String(currentUser?.name||currentUser?.username||'').trim().split(/\s+/)[0]||'there'}
+  function motivationalLine(seed=0){
+    const d=new Date(), key=d.getFullYear()*372+(d.getMonth()+1)*31+d.getDate()+seed;
+    return motivationLines[Math.abs(key)%motivationLines.length];
+  }
+  function eaglePersonalGreeting(seed=0){
+    const h=new Date().getHours(), part=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
+    return `${part}, ${escV(firstName())}. ${escV(motivationalLine(seed))}`;
+  }
+  function dashboardPersonalInsight(metrics,open,critical,due){
+    const me=(state.personnel||[]).find(p=>String(p.employeeNumber||'')===String(currentUser?.employeeNumber||''));
+    if(critical.length)return `Safety first, ${escV(firstName())}. ${critical.length} Critical Gate issue${critical.length===1?' needs':'s need'} attention.`;
+    if(currentUser?.role==='evaluator'){
+      const mine=(state.assessmentAssignments||state.assignedAssessments||[]).filter(a=>String(a.evaluatorUsername||'').toLowerCase()===String(currentUser?.username||'').toLowerCase()&&!['Completed','Cancelled'].includes(a.status));
+      if(mine.length)return `${escV(firstName())}, you have ${mine.length} assigned assessment${mine.length===1?'':'s'} waiting for your attention.`;
+    }
+    if(me){const m=metrics.find(x=>String(x.employeeNumber)===String(me.employeeNumber));if(m&&m.pct>0)return `${escV(firstName())}, your recorded readiness is ${m.pct}%. Keep building on that progress.`}
+    if(due.length)return `${escV(firstName())}, ${due.length} reassessment${due.length===1?' is':'s are'} coming up. A little preparation today keeps qualifications moving.`;
+    if(!open.length)return `Looking good, ${escV(firstName())}. No open corrective actions need attention right now.`;
+    return `${escV(firstName())}, Eagle is ready to help you choose the next best action.`;
+  }
+
   function askBrainCard(){
     return `<section class="card dashboard-brain"><div class="dashboard-card-head"><div><span class="ai-badge">Powered by RP</span><h2>Ask Eagle</h2></div><span class="brain-orb"><img src="rpia-eagle-192.png" alt="Eagle" class="eagle-mini"></span></div><p>Ask about readiness, employees, tasks, corrective actions, qualifications, or approved procedures.</p><div class="ask-row compact"><input id="dashBrainQuestion" placeholder="Example: What does John Smith need to advance?"><button class="primary" id="dashAskBrain">Ask</button></div><div id="dashBrainAnswer" class="ai-answer compact-answer">Ask a question or open the full conversation.</div><div class="actions"><button class="secondary" id="openFullBrain">Open full conversation</button></div></section>`;
   }
@@ -151,7 +181,7 @@
     const statusTone=critical.length?'red':overdue.length?'amber':readiness>=85?'green':'blue';
     page('Dashboard','',`
       <section class="command-hero ${statusTone}">
-        <div class="command-greeting"><span class="eyebrow">Eagle Operational Briefing</span><h1>${greeting}, ${userName}.</h1><p>Eagle reviewed the current competency records and selected the work with the highest operational impact.</p></div>
+        <div class="command-greeting"><span class="eyebrow">Eagle Operational Briefing</span><h1>${greeting}, ${userName}.</h1><p>${escV(motivationalLine())}</p><p class="eagle-personal-insight">${dashboardPersonalInsight(metrics,open,critical,due)}</p></div>
         <div class="command-status"><small>Plant status</small><b>${status}</b><span>Last analysis ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span></div>
       </section>
       <section class="command-summary">
@@ -252,7 +282,8 @@
   function currentContext(){const title=$q('#main .page-head h1')?.textContent||'Dashboard';return title}
   window.openEaglePanel=function(){
     let panel=$q('#eagleAssistantPanel');if(!panel){panel=document.createElement('aside');panel.id='eagleAssistantPanel';panel.className='eagle-assistant-panel';document.body.appendChild(panel)}
-    panel.innerHTML=`<div class="eagle-panel-head"><div><img src="rpia-eagle-192.png" alt="Eagle"><span><b>Ask Eagle</b><small>Context: ${escV(currentContext())}</small></span></div><button id="closeEaglePanel" class="icon-btn">✕</button></div><div id="eagleMessages" class="eagle-messages">${eagleConversation.map(m=>`<div class="eagle-msg ${m.role}">${m.html}</div>`).join('')||'<div class="eagle-msg assistant">How can I help you with this screen?</div>'}</div><div class="eagle-compose"><input id="eagleQuestion" placeholder="Ask anything about your operation..."><button class="primary" id="sendEagleQuestion">Ask</button></div>`;
+    const openSeed=(window.__eagleOpenCount=(window.__eagleOpenCount||0)+1);
+    panel.innerHTML=`<div class="eagle-panel-head"><div><img src="rpia-eagle-192.png" alt="Eagle"><span><b>Ask Eagle</b><small>Context: ${escV(currentContext())}</small></span></div><button id="closeEaglePanel" class="icon-btn">✕</button></div><div class="eagle-welcome"><b>${eaglePersonalGreeting(openSeed)}</b><small>I know who is signed in and I’ll keep this conversation tied to your role and current screen.</small></div><div id="eagleMessages" class="eagle-messages">${eagleConversation.map(m=>`<div class="eagle-msg ${m.role}">${m.html}</div>`).join('')||'<div class="eagle-msg assistant">What would you like to work on?</div>'}</div><div class="eagle-compose"><input id="eagleQuestion" placeholder="Ask anything about your operation..."><button class="primary" id="sendEagleQuestion">Ask</button></div>`;
     panel.classList.add('open');window.closeEaglePanel=()=>panel.classList.remove('open');$q('#closeEaglePanel').onclick=window.closeEaglePanel;try{RPBrainEnterprise.bind(panel)}catch(err){log('WARNING','Navigation Service','Could not bind Eagle result actions',err.message)};
     const send=()=>{const input=$q('#eagleQuestion'),q=input.value.trim();if(!q)return;eagleConversation.push({role:'user',html:escV(q)});let html;try{const r=RPBrainEnterprise.answer(q);html=r.html;const why=ReasoningEngine.explain(q,r);html+=`<details class="reasoning-summary"><summary>Why this answer?</summary><p>${escV(why.summary)}</p></details>`;log('INFO','Eagle',`Question answered in ${currentContext()}`,why.summary)}catch(err){html=`Eagle could not complete this request. ${escV(err.message||'')}`;log('ERROR','Eagle','Floating assistant failed',err.message)}eagleConversation.push({role:'assistant',html});openEaglePanel();setTimeout(()=>{$q('#eagleMessages').scrollTop=$q('#eagleMessages').scrollHeight},0)};
     $q('#sendEagleQuestion').onclick=send;$q('#eagleQuestion').onkeydown=e=>{if(e.key==='Enter')send()};setTimeout(()=>$q('#eagleQuestion')?.focus(),50)
@@ -370,7 +401,7 @@
   ];
   window.renderNav=function(){
     const allowed=window.navDefs.filter(x=>{if(['settings','enterprise'].includes(x[0]))return currentUser.role==='admin';if(x[0]==='audit')return currentUser.role==='admin'||currentUser.role==='evaluator';return true});
-    $q('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}<small>v9.22.0</small></div>`;
+    $q('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}<small>v9.23.0</small></div>`;
     $$q('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view));
   };
   window.navigate=function(v){

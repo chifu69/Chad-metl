@@ -1,4 +1,4 @@
-const CACHE='rp-v9.22.0-eagle-semantic-role-brain';
+const CACHE='rp-v9.23.0-eagle-personal-experience';
 const ASSETS=[
   './eagle-controller.js',
   './',

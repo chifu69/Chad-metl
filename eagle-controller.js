@@ -1,4 +1,4 @@
-/* RP Eagle Brain Rebuild v9.22.0
+/* RP Eagle Brain Rebuild v9.23.0
    Architecture:
    USER -> EAGLE -> Intent + Entities + Conversation Context
         -> Permission Gate -> Engine Plan -> Existing RP Workflow / Answer
@@ -9,7 +9,7 @@
 (function(){
   'use strict';
 
-  const VERSION='9.22.0';
+  const VERSION='9.23.0';
   const $one=(sel,root=document)=>root.querySelector(sel);
   const $all=(sel,root=document)=>[...root.querySelectorAll(sel)];
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
