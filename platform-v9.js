@@ -11,7 +11,7 @@
   };
 
   'use strict';
-  const VERSION='9.25.1';
+  const VERSION='9.25.2';
   const $q=(s,r=document)=>r.querySelector(s);
   const $$q=(s,r=document)=>[...r.querySelectorAll(s)];
   const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
@@ -464,7 +464,7 @@
     const send=()=>{const input=$q('#eagleQuestion'),q=input.value.trim();if(!q)return;eagleConversation.push({role:'user',html:escV(q)});let html;try{const r=RPBrainEnterprise.answer(q);html=r.html;const why=ReasoningEngine.explain(q,r);html+=`<details class="reasoning-summary"><summary>Why this answer?</summary><p>${escV(why.summary)}</p></details>`;log('INFO','Eagle',`Question answered in ${currentContext()}`,why.summary)}catch(err){html=`Eagle could not complete this request. ${escV(err.message||'')}`;log('ERROR','Eagle','Floating assistant failed',err.message)}eagleConversation.push({role:'assistant',html});openEaglePanel();setTimeout(()=>{$q('#eagleMessages').scrollTop=$q('#eagleMessages').scrollHeight},0)};
     $q('#sendEagleQuestion').onclick=send;$q('#eagleQuestion').onkeydown=e=>{if(e.key==='Enter')send()};setTimeout(()=>$q('#eagleQuestion')?.focus(),50)
   };
-  function ensureFloatingEagle(){if(!$q('#app')||$q('#app').classList.contains('hidden'))return;let b=$q('#floatingEagleAI');if(!b){b=document.createElement('button');b.id='floatingEagleAI';b.className='floating-eagle-ai';b.innerHTML='<img src="rpia-eagle-192.png" alt=""><span>Ask Eagle</span>';b.onclick=openEaglePanel;document.body.appendChild(b)}}
+  function ensureFloatingEagle(){if(!$q('#app')||$q('#app').classList.contains('hidden'))return;let b=$q('#floatingEagleAI');if(!b){b=document.createElement('button');b.id='floatingEagleAI';b.className='floating-eagle-ai';b.setAttribute('aria-label','Open Eagle Chat');b.title='Ask Eagle';b.innerHTML='<span class="eagle-chat-glyph" aria-hidden="true">💬</span><img src="rpia-eagle-192.png" alt=""><span class="eagle-chat-label">Ask Eagle</span>';b.onclick=openEaglePanel;document.body.appendChild(b)}}
   window.enterpriseToolsView=function(){
     if(currentUser?.role!=='admin'){navigate('dashboard');return}
     page('Enterprise','Server configuration, diagnostics, security, and recovery tools',`<div class="enterprise-module-grid"><button class="enterprise-module" id="enterpriseServer"><span>🖥️</span><b>Server Configuration</b><small>Local, test, production, API, files, and authentication.</small></button><button class="enterprise-module" id="enterpriseDiagnostics"><span>🛠️</span><b>Diagnostic Center</b><small>Engine health, tests, logs, and diagnostic reports.</small></button><button class="enterprise-module" id="enterpriseBackup"><span>💾</span><b>Backup & Restore</b><small>Create, verify, restore, and review local or enterprise backups.</small></button><button class="enterprise-module" id="enterpriseSecurity"><span>🔐</span><b>Security Center</b><small>Review roles and permission assurance issues.</small></button></div><div id="enterpriseSummary" class="card"><h3>Platform status</h3><p>${dataQualityIssues().length} data quality issue(s) · ${permissionIssues().length} permission issue(s).</p></div>`);
@@ -500,7 +500,7 @@
       const identity=header.querySelector('.brand, .brand-text, .app-title, .header-brand, h1, .user-chip');
       const motto=document.createElement('div');
       motto.className='rp-header-motto';
-      motto.innerHTML='<span>RUN LIKE NEW</span><span>LOOK LIKE NEW</span>';
+      motto.innerHTML='<span><i aria-hidden="true">✨</i> RUN LIKE NEW</span><span>LOOK LIKE NEW <i aria-hidden="true">✨</i></span>';
 
       if(identity && identity.parentNode===header){
         identity.insertAdjacentElement('afterend',motto);
@@ -577,7 +577,7 @@
   ];
   window.renderNav=function(){
     const allowed=window.navDefs.filter(x=>{if(['settings','enterprise'].includes(x[0]))return currentUser.role==='admin';if(x[0]==='audit')return currentUser.role==='admin'||currentUser.role==='evaluator';return true});
-    $q('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}<small>v9.25.1</small></div>`;
+    $q('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}<small>v9.25.2</small></div>`;
     $$q('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view));
   };
   window.navigate=function(v){

@@ -1,4 +1,4 @@
-/* RP Eagle Natural Language Max v9.25.1
+/* RP Eagle Natural Language Max v9.25.2
    Deterministic local NLU, no LLM.
    Pipeline:
    normalize -> dictionary expansion -> dialogue control -> identity/context
@@ -7,7 +7,7 @@
 */
 (function(){
   'use strict';
-  const VERSION='9.25.1';
+  const VERSION='9.25.2';
 
   const $one=(s,r=document)=>r.querySelector(s);
   const $all=(s,r=document)=>[...r.querySelectorAll(s)];

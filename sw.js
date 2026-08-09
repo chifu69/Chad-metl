@@ -1,4 +1,4 @@
-const CACHE='rp-v9.25.1-eagle-direct-module-intents';
+const CACHE='rp-v9.25.2-eagle-chat-clean-ui';
 const ASSETS=[
   './eagle-controller.js',
   './',
