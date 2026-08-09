@@ -1,4 +1,4 @@
-const CACHE='rp-v9.25.0-role-aware-dashboard';
+const CACHE='rp-v9.25.1-eagle-direct-module-intents';
 const ASSETS=[
   './eagle-controller.js',
   './',

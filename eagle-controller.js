@@ -1,4 +1,4 @@
-/* RP Eagle Natural Language Max v9.25.0
+/* RP Eagle Natural Language Max v9.25.1
    Deterministic local NLU, no LLM.
    Pipeline:
    normalize -> dictionary expansion -> dialogue control -> identity/context
@@ -7,7 +7,7 @@
 */
 (function(){
   'use strict';
-  const VERSION='9.25.0';
+  const VERSION='9.25.1';
 
   const $one=(s,r=document)=>r.querySelector(s);
   const $all=(s,r=document)=>[...r.querySelectorAll(s)];
@@ -247,6 +247,15 @@
     {id:'identity.self',family:'identity',score:p=>p.identity?950:0},
     {id:'knowledge.list',family:'knowledge',score:p=>p.knowledgeBrowse?900:0},
     {id:'readiness.readyCandidates',family:'readiness',score:p=>p.globalWhoReady?880:0},
+    {id:'module.assessments',family:'system',score:p=>p.assessment&&!p.assign&&!p.create&&!p.start&&!p.history&&!p.self&&!p.overdue?860:0},
+    {id:'module.assignments',family:'system',score:p=>p.assignment&&!p.assign&&!p.create&&!p.self&&!p.overdue?850:0},
+    {id:'module.personnel',family:'system',score:p=>p.employeeConcept&&!p.create&&!p.edit&&/^((personnel|employee|employees|associate|associates|operators?|workers?|team member)(s)?)$/.test(p.text)?840:0},
+    {id:'module.metl',family:'system',score:p=>/^((metl|metl tasks?|tasks?|subtasks?|metl and subtasks?|metl subtasks?))$/.test(p.text)?835:0},
+    {id:'module.corrective',family:'system',score:p=>/^((corrective action|corrective actions|reassessment|reassessments))$/.test(p.text)?830:0},
+    {id:'module.matrix',family:'system',score:p=>/^((readiness matrix|matrix))$/.test(p.text)?825:0},
+    {id:'module.notifications',family:'system',score:p=>/^((notification|notifications|alerts?))$/.test(p.text)?820:0},
+    {id:'module.audit',family:'system',score:p=>/^((audit|audit trail))$/.test(p.text)?815:0},
+    {id:'module.backup',family:'system',score:p=>/^((backup|back up|backup and restore|restore))$/.test(p.text)?810:0},
 
     {id:'assignment.create',family:'assignment',score:p=>{
       let s=0;
@@ -539,6 +548,25 @@
         if(!p.person)return `<p>Tell me an employee name or number.</p>`;
         return `<h3>${esc(p.person.name)}</h3><p>Employee #${esc(p.person.employeeNumber)} · ${esc(p.person.shift)} Shift · ${esc(p.person.assignedLevel)}</p><button class="secondary eagle-btn" data-action="person" data-emp="${esc(p.person.employeeNumber)}">Open employee profile</button>`;
 
+      case'module.assessments':
+        return `<h3>Assessments</h3><p>Open assessment sessions, history, and evaluation workflows.</p><button class="primary eagle-btn" data-action="nav" data-view="assessments">Open Assessments</button>`;
+      case'module.assignments':
+        return `<h3>Assigned Assessments</h3><p>Review planned training and assessment work.</p><button class="primary eagle-btn" data-action="nav" data-view="assignments">Open Assigned Assessments</button>`;
+      case'module.personnel':
+        return `<h3>Personnel</h3><p>Open the Personnel Master and associate records.</p><button class="primary eagle-btn" data-action="nav" data-view="personnel">Open Personnel</button>`;
+      case'module.metl':
+        return `<h3>METL & Subtasks</h3><p>Open the competency task and subtask library.</p><button class="primary eagle-btn" data-action="nav" data-view="tasks">Open METL & Subtasks</button>`;
+      case'module.corrective':
+        return `<h3>Corrective Actions</h3><p>Open corrective actions, retraining, and reassessments.</p><button class="primary eagle-btn" data-action="nav" data-view="actions">Open Corrective Actions</button>`;
+      case'module.matrix':
+        return `<h3>Readiness Matrix</h3><p>Open readiness and qualification coverage.</p><button class="primary eagle-btn" data-action="nav" data-view="matrix">Open Readiness Matrix</button>`;
+      case'module.notifications':
+        return `<h3>Notifications</h3><p>Open current RP notifications and alerts.</p><button class="primary eagle-btn" data-action="nav" data-view="notifications">Open Notifications</button>`;
+      case'module.audit':
+        return (isAdmin()||currentUser?.role==='evaluator')?`<h3>Audit Trail</h3><p>Open the traceable activity history.</p><button class="primary eagle-btn" data-action="nav" data-view="audit">Open Audit Trail</button>`:`<p>You are not authorized to view the Audit Trail.</p>`;
+      case'module.backup':
+        return isAdmin()?`<h3>Backup & Restore</h3><p>Open protected backup, restore, and integrity tools.</p><button class="primary eagle-btn" data-action="nav" data-view="backup">Open Backup & Restore</button>`:`<p>Backup & Restore is restricted to administrators.</p>`;
+
       case'system.backup': return isAdmin()?`<button class="primary eagle-btn" data-action="nav" data-view="backup">Open Backup & Restore</button>`:`<p>Backup & Restore is restricted to administrators.</p>`;
       case'system.notifications': return `<button class="primary eagle-btn" data-action="nav" data-view="notifications">Open Notifications</button>`;
       case'system.audit': return (isAdmin()||currentUser?.role==='evaluator')?`<button class="primary eagle-btn" data-action="nav" data-view="audit">Open Audit Trail</button>`:`<p>You are not authorized to view the Audit Trail.</p>`;
@@ -651,6 +679,19 @@
   }};
 
   const TESTS=[
+    ['Assessments','module.assessments'],
+    ['Evaluations','module.assessments'],
+    ['Assignments','module.assignments'],
+    ['Assigned work','module.assignments'],
+    ['Personnel','module.personnel'],
+    ['Employees','module.personnel'],
+    ['METL','module.metl'],
+    ['Tasks','module.metl'],
+    ['Corrective Actions','module.corrective'],
+    ['Readiness Matrix','module.matrix'],
+    ['Notifications','module.notifications'],
+    ['Audit Trail','module.audit'],
+    ['Backup','module.backup'],
     ['Add assessment to Luis','assignment.create'],
     ['Add assessment for Luis','assignment.create'],
     ['Create assessment for Luis','assignment.create'],
