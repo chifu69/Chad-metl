@@ -655,3 +655,13 @@ html,body{max-width:100%;overflow-x:hidden}
 @keyframes rpCleanSparkle{0%,72%,100%{opacity:.58;transform:scale(.82) rotate(0)}82%{opacity:1;transform:scale(1.18) rotate(12deg)}90%{opacity:.82;transform:scale(.95) rotate(-6deg)}}
 @media(max-width:780px){.floating-eagle-ai{width:62px!important;height:55px!important}.floating-eagle-ai img{width:41px!important;height:41px!important}}
 @media(prefers-reduced-motion:reduce){.floating-eagle-ai .eagle-chat-glyph,.rp-header-motto span i{animation:none!important}}
+
+
+/* v9.26.0 Approved Evaluator Management */
+.evaluator-admin-list{display:grid;gap:10px;margin-top:14px}
+.evaluator-admin-row{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--soft)}
+.evaluator-admin-row.is-inactive{opacity:.68}
+.evaluator-admin-main{min-width:0;flex:1}
+.evaluator-admin-main h4{margin:0 0 4px}
+.evaluator-admin-main p{margin:0 0 8px;color:var(--muted)}
+@media(max-width:760px){.evaluator-admin-row{align-items:stretch;flex-direction:column}.evaluator-admin-row>.actions{justify-content:flex-start}}

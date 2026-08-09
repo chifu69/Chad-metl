@@ -1,4 +1,4 @@
-const CACHE='rp-v9.25.2-eagle-chat-clean-ui';
+const CACHE='rp-v9.26.0-approved-evaluator-management';
 const ASSETS=[
   './eagle-controller.js',
   './',

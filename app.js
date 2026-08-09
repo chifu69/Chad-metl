@@ -12,8 +12,150 @@ const defaultUsers=[
 let state,currentUser,pendingUser,view='dashboard';
 function clone(v){return JSON.parse(JSON.stringify(v))}
 function esc(v=''){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
-function loadUsers(){try{const u=JSON.parse(localStorage.getItem(AUTH_KEY));const users=Array.isArray(u)&&u.length?u:clone(defaultUsers);const people=(window.METL_BASELINE?.personnel||[]).filter(p=>p.employeeNumber&&p.name&&p.status==='Active'&&['-10','-20'].includes(p.assignedLevel));for(const p of people){if(!users.some(x=>x.username===String(p.employeeNumber)))users.push({username:String(p.employeeNumber),name:p.name,employeeNumber:String(p.employeeNumber),role:'viewer',password:'RP'+p.employeeNumber,mustChange:true,maxLevel:p.assignedLevel,language:'en'})}let chad=users.find(x=>String(x.username||'').toLowerCase()==='chad walker');if(!chad){chad=clone(defaultUsers.find(x=>String(x.username||'').toLowerCase()==='chad walker'));users.push(chad)}Object.assign(chad,{name:'Chad Walker',role:'admin',maxLevel:'-40',disabled:false,evaluatorId:'EV-01',manageMetl:true,managePersonnel:true});if(!chad.password){chad.password='Chad123';chad.mustChange=true}if(localStorage.getItem(AUTH_RESET_KEY)!=='done'){let admin=users.find(x=>x.username==='Administrator');if(!admin){admin=clone(defaultUsers[0]);users.unshift(admin)}admin.password='Admin123';admin.mustChange=true;admin.disabled=false;admin.role='admin';localStorage.setItem(AUTH_RESET_KEY,'done')}localStorage.setItem(AUTH_KEY,JSON.stringify(users));return users}catch{return clone(defaultUsers)}}
+function loadUsers(){
+  try{
+    const stored=JSON.parse(localStorage.getItem(AUTH_KEY));
+    const users=Array.isArray(stored)&&stored.length?stored:clone(defaultUsers);
+
+    const people=(window.METL_BASELINE?.personnel||[])
+      .filter(p=>p.employeeNumber&&p.name&&p.status==='Active'&&['-10','-20'].includes(p.assignedLevel));
+    for(const p of people){
+      if(!users.some(x=>x.username===String(p.employeeNumber))){
+        users.push({
+          username:String(p.employeeNumber),name:p.name,employeeNumber:String(p.employeeNumber),
+          role:'viewer',password:'RP'+p.employeeNumber,mustChange:true,maxLevel:p.assignedLevel,language:'en'
+        });
+      }
+    }
+
+    let chad=users.find(x=>String(x.username||'').toLowerCase()==='chad walker');
+    if(!chad){
+      chad=clone(defaultUsers.find(x=>String(x.username||'').toLowerCase()==='chad walker'));
+      users.push(chad);
+    }
+    Object.assign(chad,{
+      name:'Chad Walker',role:'admin',maxLevel:'-40',disabled:false,
+      evaluatorId:'EV-01',manageMetl:true,managePersonnel:true
+    });
+    if(!chad.password){chad.password='Chad123';chad.mustChange=true}
+
+    // Every active evaluator in the workbook receives or links to a login account.
+    const baselineEvaluators=(window.METL_BASELINE?.evaluators||[])
+      .filter(e=>e&&e.id&&e.name&&e.status==='Active');
+
+    const usernameBase=name=>{
+      const parts=String(name||'').trim().split(/\s+/).filter(Boolean);
+      return (parts.length>1?`${parts[0]}.${parts[parts.length-1]}`:(parts[0]||'evaluator'))
+        .replace(/[^a-zA-Z0-9._-]/g,'');
+    };
+
+    for(const ev of baselineEvaluators){
+      let eu=users.find(x=>String(x.evaluatorId||'')===String(ev.id)) ||
+        users.find(x=>String(x.name||'').trim().toLowerCase()===String(ev.name||'').trim().toLowerCase() &&
+          (x.role==='admin'||x.role==='evaluator'));
+
+      if(!eu){
+        const base=usernameBase(ev.name);
+        let username=base,n=2;
+        while(users.some(x=>String(x.username||'').toLowerCase()===username.toLowerCase())){
+          username=`${base}${n++}`;
+        }
+        eu={
+          username,name:ev.name,role:'evaluator',
+          password:`RP${String(ev.id).replace(/[^0-9A-Za-z]/g,'')}`,
+          mustChange:true,maxLevel:ev.maxLevel||'-10',evaluatorId:ev.id,
+          language:'en',disabled:false
+        };
+        users.push(eu);
+      }else{
+        eu.name=ev.name;
+        eu.evaluatorId=ev.id;
+        eu.maxLevel=ev.maxLevel||eu.maxLevel||'-10';
+        eu.disabled=false;
+        if(eu.role!=='admin')eu.role='evaluator';
+      }
+    }
+
+    if(localStorage.getItem(AUTH_RESET_KEY)!=='done'){
+      let admin=users.find(x=>x.username==='Administrator');
+      if(!admin){admin=clone(defaultUsers[0]);users.unshift(admin)}
+      admin.password='Admin123';admin.mustChange=true;admin.disabled=false;admin.role='admin';
+      localStorage.setItem(AUTH_RESET_KEY,'done');
+    }
+
+    localStorage.setItem(AUTH_KEY,JSON.stringify(users));
+    return users;
+  }catch{
+    return clone(defaultUsers);
+  }
+}
 let authUsers=loadUsers(); function saveUsers(){localStorage.setItem(AUTH_KEY,JSON.stringify(authUsers))}
+
+function evaluatorUsernameBase(name=''){
+  const parts=String(name||'').trim().split(/\s+/).filter(Boolean);
+  return (parts.length>1?`${parts[0]}.${parts[parts.length-1]}`:(parts[0]||'evaluator'))
+    .replace(/[^a-zA-Z0-9._-]/g,'');
+}
+function uniqueEvaluatorUsername(name,currentUsername=''){
+  const base=evaluatorUsernameBase(name);
+  let candidate=base,n=2;
+  while(authUsers.some(u=>
+    String(u.username||'').toLowerCase()===candidate.toLowerCase() &&
+    String(u.username||'').toLowerCase()!==String(currentUsername||'').toLowerCase()
+  ))candidate=`${base}${n++}`;
+  return candidate;
+}
+function evaluatorAccountById(id){
+  return authUsers.find(u=>String(u.evaluatorId||'')===String(id||''))||null;
+}
+function ensureEvaluatorAccount(ev){
+  if(!ev||!ev.id||!ev.name)return null;
+  let u=evaluatorAccountById(ev.id) ||
+    authUsers.find(x=>String(x.name||'').trim().toLowerCase()===String(ev.name||'').trim().toLowerCase() &&
+      (x.role==='admin'||x.role==='evaluator'));
+
+  if(!u){
+    u={
+      username:uniqueEvaluatorUsername(ev.name),
+      name:ev.name,
+      role:'evaluator',
+      password:`RP${String(ev.id).replace(/[^0-9A-Za-z]/g,'')}`,
+      mustChange:true,
+      maxLevel:ev.maxLevel||'-10',
+      evaluatorId:ev.id,
+      language:'en',
+      disabled:ev.status!=='Active'
+    };
+    authUsers.push(u);
+  }else{
+    u.name=ev.name;
+    u.evaluatorId=ev.id;
+    u.maxLevel=ev.maxLevel||u.maxLevel||'-10';
+    u.disabled=ev.status!=='Active';
+    if(u.role!=='admin')u.role='evaluator';
+    if(!u.username)u.username=uniqueEvaluatorUsername(ev.name);
+    if(!u.password){
+      u.password=`RP${String(ev.id).replace(/[^0-9A-Za-z]/g,'')}`;
+      u.mustChange=true;
+    }
+  }
+  saveUsers();
+  return u;
+}
+function syncEvaluatorAccounts(){
+  const evaluators=(state?.evaluators||window.METL_BASELINE?.evaluators||[])
+    .filter(e=>e&&e.id&&e.name);
+  for(const ev of evaluators)ensureEvaluatorAccount(ev);
+
+  const activeIds=new Set(
+    evaluators.filter(e=>e.status==='Active').map(e=>String(e.id))
+  );
+  for(const u of authUsers){
+    if(u.evaluatorId && u.role!=='admin' && !activeIds.has(String(u.evaluatorId)))u.disabled=true;
+  }
+  saveUsers();
+}
+
 function employeePhoto(p,cls='employee-photo'){return p?.photo?`<img class="${cls}" src="${p.photo}" alt="${esc(p.name||'Employee')} photo">`:`<div class="${cls} photo-placeholder">${esc((p?.name||'?').trim().charAt(0).toUpperCase()||'?')}</div>`}
 function readEmployeePhoto(file,done){if(!file)return done('');if(!file.type.startsWith('image/'))return toast('Choose an image file');if(file.size>12*1024*1024)return toast('Photo is too large');const r=new FileReader();r.onload=()=>{const img=new Image();img.onload=()=>{const max=480,scale=Math.min(1,max/Math.max(img.width,img.height)),w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale)),c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);done(c.toDataURL('image/jpeg',.78))};img.onerror=()=>toast('Unable to read photo');img.src=r.result};r.readAsDataURL(file)}
 function normalize(s){
@@ -140,8 +282,12 @@ function assignmentTask(a){return state.tasks.find(t=>String(t.id)===String(a?.t
 function assignmentPerson(a){return state.personnel.find(p=>String(p.employeeNumber)===String(a?.employeeNumber))||null}
 function authorizedEvaluatorUsers(taskId=''){
   const task=state.tasks.find(t=>String(t.id)===String(taskId));
+  const activeEvaluatorIds=new Set(
+    (state.evaluators||[]).filter(e=>e&&e.name&&e.status==='Active').map(e=>String(e.id))
+  );
   return authUsers
     .filter(u=>u&&!u.disabled&&(u.role==='admin'||u.role==='evaluator'))
+    .filter(u=>u.role==='admin'||!u.evaluatorId||activeEvaluatorIds.has(String(u.evaluatorId)))
     .filter(u=>!task||levelRank[u.maxLevel||'-10']>=levelRank[task.requiredLevel||'-10'])
     .sort((a,b)=>String(a.name||a.username||'').localeCompare(String(b.name||b.username||'')));
 }
@@ -153,7 +299,7 @@ function login(){const name=$('#username').value.trim().toLowerCase(),pwd=$('#pi
 function changePassword(){const a=$('#newPassword').value,b=$('#confirmPassword').value;if(a.length<6)return toast('Use at least 6 characters');if(a!==b)return toast('Passwords do not match');if(a===pendingUser.password)return toast('Choose a different password');pendingUser.password=a;pendingUser.mustChange=false;saveUsers();$('#passwordModal').classList.add('hidden');completeLogin(pendingUser)}
 function completeLogin(u){currentUser=u;uiLanguage=u.language||uiLanguage;applyLanguage(uiLanguage,false);$('#login').classList.add('hidden');$('#app').classList.remove('hidden');$('#serverConfigBtn')?.classList.toggle('hidden',u.role!=='admin');$('#roleBadge').textContent=u.role==='admin'?' · Administrator':u.role==='viewer'?' · Read only':` · Approved Evaluator ${u.maxLevel}`;renderNav();navigate('dashboard')}
 function logout(){currentUser=null;$('#serverConfigBtn')?.classList.add('hidden');$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#pin').value='';$('#username').focus()}
-const RP_VERSION='9.25.2';
+const RP_VERSION='9.26.0';
 const navDefs=[['dashboard','Dashboard','Inicio'],['intelligence','Eagle','Eagle'],['personnel','Personnel','Personal'],['tasks','METL & Subtasks','METL y subtareas'],['matrix','Readiness Matrix','Matriz de preparación'],['assignments','Assigned Assessments','Evaluaciones asignadas'],['assess','Assessment','Evaluación'],['sessions','Assessment History','Historial de evaluaciones'],['actions','Corrective Actions','Acciones correctivas'],['notifications','Notifications','Notificaciones'],['audit','Audit Trail','Auditoría'],['plant','Plant Intelligence','Inteligencia de planta'],['knowledge','Knowledge Center','Centro de conocimiento'],['engines','Engine Center','Centro de motores'],['profile','My Profile','Mi perfil'],['settings','Administration','Administración']];
 function renderNav(){const allowed=navDefs.filter(x=>{if(x[0]==='settings')return currentUser.role==='admin';if(x[0]==='assess')return canEvaluate();if(x[0]==='audit')return currentUser.role==='admin'||currentUser.role==='evaluator';return true});$('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}<small>v${RP_VERSION}</small></div>`;$$('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view))}
 function navigate(v){
@@ -1340,6 +1486,98 @@ function metlIntelligence(){const all=aiShiftSummary(''),coverage=aiCoverage(),a
 
 function ensureUserForPerson(p){let u=authUsers.find(x=>String(x.employeeNumber||'')===String(p.employeeNumber)||x.name===p.name);if(!u){u={username:String(p.employeeNumber),name:p.name,employeeNumber:String(p.employeeNumber),role:'viewer',password:'RP'+p.employeeNumber,mustChange:true,maxLevel:p.assignedLevel||'-10',language:'en',manageMetl:false,managePersonnel:false};authUsers.push(u);saveUsers()}return u}
 function userEdit(emp){const p=state.personnel.find(x=>x.employeeNumber===emp);if(!p)return;const u=ensureUserForPerson(p),oldP=clone(p),oldU=clone(u);let pendingPhoto=p.photo||'';modal(`<h2>Edit user</h2><div class="user-edit-hero"><div id="userPhotoPreview">${employeePhoto(p,'employee-photo-large')}</div><div><h3>${esc(p.name)}</h3><p>Employee #${esc(p.employeeNumber)} · ${esc(p.shift)} Shift · ${esc(p.role)}</p><label class="photo-upload">Add or change photo<input id="uPhoto" type="file" accept="image/*" capture="environment"></label><button class="secondary" id="uRemovePhoto">Remove photo</button></div></div><div class="form-grid"><label>Employee number<input id="uEmp" value="${esc(p.employeeNumber)}"></label><label>Name<input id="uName" value="${esc(p.name)}"></label><label>Position / role<select id="uRole">${['Operator','Sr. Lead','Supervisor'].map(x=>`<option ${p.role===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Shift<select id="uShift">${['A','B','C','D'].map(x=>`<option ${p.shift===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Assigned qualification<select id="uAssigned">${Object.keys(levelRank).map(x=>`<option ${p.assignedLevel===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Employment status<select id="uStatus">${['Active','Leave of Absence','Inactive','Terminated'].map(x=>`<option ${p.status===x?'selected':''}>${x}</option>`).join('')}</select></label><label>System access<select id="uAccess"><option value="viewer" ${u.role==='viewer'?'selected':''}>Read only</option><option value="evaluator" ${u.role==='evaluator'?'selected':''}>Approved evaluator</option><option value="admin" ${u.role==='admin'?'selected':''}>Administrator</option></select></label><label>Maximum evaluator level<select id="uMax">${Object.keys(levelRank).map(x=>`<option ${u.maxLevel===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Preferred language<select id="uLang"><option value="en" ${u.language!=='es'?'selected':''}>English</option><option value="es" ${u.language==='es'?'selected':''}>Español</option></select></label><label>Account status<select id="uEnabled"><option value="true" ${u.disabled!==true?'selected':''}>Active</option><option value="false" ${u.disabled===true?'selected':''}>Disabled</option></select></label><label class="mini-check"><input id="uManageMetl" type="checkbox" ${u.manageMetl?'checked':''}> Manage METL Tasks and Subtasks</label><label class="mini-check"><input id="uManagePeople" type="checkbox" ${u.managePersonnel?'checked':''}> Manage personnel</label><label class="full">Qualified production lines<input id="uLines" value="${esc(p.qualifiedLines)}"></label><label class="full">Notes<textarea id="uNotes">${esc(p.notes)}</textarea></label></div><div class="actions"><button class="primary" id="saveUserEdit">Save user</button><button class="secondary" id="resetUserPwd">Reset password</button><button class="secondary close">Cancel</button></div>`);$('#uPhoto').onchange=e=>readEmployeePhoto(e.target.files[0],data=>{pendingPhoto=data;$('#userPhotoPreview').innerHTML=data?`<img class="employee-photo-large" src="${data}" alt="Employee photo preview">`:'<div class="employee-photo-large photo-placeholder">?</div>'});$('#uRemovePhoto').onclick=()=>{pendingPhoto='';$('#userPhotoPreview').innerHTML='<div class="employee-photo-large photo-placeholder">?</div>'};$('#resetUserPwd').onclick=()=>{u.password='RP'+p.employeeNumber;u.mustChange=true;saveUsers();audit('RESET','User Password',u.username,'Temporary password restored');toast('Temporary password: RP'+p.employeeNumber)};$('#saveUserEdit').onclick=()=>{const newEmp=$('#uEmp').value.trim(),newName=$('#uName').value.trim();if(!newEmp||!newName)return toast('Employee number and name are required');if(state.personnel.some(x=>x.employeeNumber===newEmp&&x.positionId!==p.positionId))return toast('Employee number must be unique');Object.assign(p,{employeeNumber:newEmp,name:newName,role:$('#uRole').value,shift:$('#uShift').value,assignedLevel:$('#uAssigned').value,status:$('#uStatus').value,qualifiedLines:$('#uLines').value,notes:$('#uNotes').value,photo:pendingPhoto});Object.assign(u,{employeeNumber:newEmp,name:newName,role:$('#uAccess').value,maxLevel:$('#uMax').value,language:$('#uLang').value,disabled:($('#uStatus').value!=='Active'||$('#uEnabled').value!=='true'),manageMetl:$('#uManageMetl').checked,managePersonnel:$('#uManagePeople').checked});if(oldU.username===String(oldP.employeeNumber))u.username=newEmp;saveUsers();audit('UPDATE','Personnel & User',newEmp,'Profile, photo, language, or permissions updated',{person:oldP,user:oldU},{person:p,user:u});closeModal();settings()}}
+
+function nextEvaluatorId(){
+  const nums=(state.evaluators||[])
+    .map(e=>Number(String(e.id||'').replace(/\D/g,'')))
+    .filter(Number.isFinite);
+  return `EV-${String((nums.length?Math.max(...nums):0)+1).padStart(2,'0')}`;
+}
+function evaluatorEdit(id=''){
+  if(currentUser?.role!=='admin')return toast('Administrator access required');
+
+  const existing=(state.evaluators||[]).find(e=>String(e.id)===String(id))||null;
+  const ev=existing||{
+    id:nextEvaluatorId(),name:'',title:'',department:'Operations',
+    domains:'All Domains',authorizationDate:today(),status:'Active',
+    notes:'',maxLevel:'-10'
+  };
+  const account=existing?evaluatorAccountById(existing.id):null;
+
+  modal(`<h2>${existing?'Edit':'Add'} Approved Evaluator</h2>
+    <div class="form-grid">
+      <label>Evaluator ID<input id="evId" value="${esc(ev.id)}" readonly></label>
+      <label>Status<select id="evStatus">
+        <option ${ev.status==='Active'?'selected':''}>Active</option>
+        <option ${ev.status!=='Active'?'selected':''}>Inactive</option>
+      </select></label>
+      <label class="full">Name<input id="evName" value="${esc(ev.name)}" placeholder="Full name"></label>
+      <label>Title / position<input id="evTitle" value="${esc(ev.title||'')}" placeholder="Plant Trainer, Best Practices..."></label>
+      <label>Department<input id="evDepartment" value="${esc(ev.department||'')}" placeholder="Training, Operations..."></label>
+      <label>Maximum evaluator level<select id="evMax">
+        ${Object.keys(levelRank).map(x=>`<option ${ev.maxLevel===x?'selected':''}>${x}</option>`).join('')}
+      </select></label>
+      <label>Authorization date<input id="evDate" type="date" value="${esc(ev.authorizationDate||today())}"></label>
+      <label class="full">Authorized domains<input id="evDomains" value="${esc(ev.domains||'All Domains')}"></label>
+      <label class="full">Notes<textarea id="evNotes">${esc(ev.notes||'')}</textarea></label>
+      ${account?`
+        <label>Login username<input value="${esc(account.username)}" readonly></label>
+        <label>Login status<input value="${account.disabled?'Disabled':'Active'}" readonly></label>
+      `:''}
+    </div>
+    <div class="notice">
+      Deactivating an evaluator preserves historical assessments, removes the evaluator from future assignment choices, and disables the linked login.
+    </div>
+    <div class="actions">
+      <button class="primary" id="saveEvaluator">${existing?'Save evaluator':'Create evaluator'}</button>
+      ${existing&&account?'<button class="secondary" id="resetEvaluatorPassword">Reset temporary password</button>':''}
+      <button class="secondary close">Cancel</button>
+    </div>`);
+
+  if(existing&&account){
+    $('#resetEvaluatorPassword').onclick=()=>{
+      account.password=`RP${String(existing.id).replace(/[^0-9A-Za-z]/g,'')}`;
+      account.mustChange=true;
+      account.disabled=existing.status!=='Active';
+      saveUsers();
+      audit('RESET','Evaluator Password',account.username,'Evaluator temporary password reset');
+      toast(`Temporary password reset for ${account.username}`);
+    };
+  }
+
+  $('#saveEvaluator').onclick=()=>{
+    const name=$('#evName').value.trim();
+    if(!name)return toast('Evaluator name is required');
+
+    const before=existing?clone(existing):null;
+    Object.assign(ev,{
+      name,
+      title:$('#evTitle').value.trim(),
+      department:$('#evDepartment').value.trim(),
+      maxLevel:$('#evMax').value,
+      authorizationDate:$('#evDate').value,
+      domains:$('#evDomains').value.trim()||'All Domains',
+      status:$('#evStatus').value,
+      notes:$('#evNotes').value.trim()
+    });
+
+    if(!existing)state.evaluators.push(ev);
+
+    const u=ensureEvaluatorAccount(ev);
+    if(u){
+      u.name=ev.name;
+      u.maxLevel=ev.maxLevel;
+      u.disabled=ev.status!=='Active';
+      if(u.role!=='admin')u.role='evaluator';
+      saveUsers();
+    }
+
+    save();
+    audit(existing?'UPDATE':'CREATE','Approved Evaluator',ev.id,`${ev.name} · ${ev.status}`,before,ev);
+    closeModal();
+    settings();
+  };
+}
 function settings(){
   page(
     'Administration',
@@ -1369,6 +1607,17 @@ function settings(){
     </div>
 
     <div id="adminUsers" class="admin-user-grid"></div>
+
+    <div class="card evaluator-admin">
+      <div class="section-heading">
+        <div>
+          <h3>Approved Evaluators</h3>
+          <p>Add, edit, activate, or deactivate evaluators without rebuilding RP IA. Active evaluators receive a linked login account.</p>
+        </div>
+        <button class="primary" id="addEvaluator">Add evaluator</button>
+      </div>
+      <div id="evaluatorAdminList" class="evaluator-admin-list"></div>
+    </div>
 
     <div class="card eagle-dictionary-admin">
       <div class="section-heading">
@@ -1467,6 +1716,50 @@ function settings(){
   drawDepartments();
   drawUsers();
 
+
+
+  const drawEvaluatorAdmin=()=>{
+    syncEvaluatorAccounts();
+    const rows=(state.evaluators||[])
+      .filter(e=>e&&e.id&&e.name)
+      .sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+
+    $('#evaluatorAdminList').innerHTML=rows.map(ev=>{
+      const u=evaluatorAccountById(ev.id);
+      return `<article class="evaluator-admin-row ${ev.status!=='Active'?'is-inactive':''}">
+        <div class="evaluator-admin-main">
+          <h4>${esc(ev.name)}</h4>
+          <p>${esc(ev.title||'Approved Evaluator')} · ${esc(ev.department||'')}</p>
+          <div class="user-meta">
+            <span>${esc(ev.id)}</span>
+            <span>Through ${esc(ev.maxLevel||'-10')}</span>
+            <span>${u?`Login: ${esc(u.username)}`:'No login'}</span>
+            <span class="pill ${ev.status==='Active'?'go':'ne'}">${esc(ev.status||'Inactive')}</span>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="secondary editEvaluator" data-id="${esc(ev.id)}">Edit</button>
+          <button class="secondary toggleEvaluator" data-id="${esc(ev.id)}">${ev.status==='Active'?'Deactivate':'Activate'}</button>
+        </div>
+      </article>`;
+    }).join('')||'<div class="empty-state"><b>No approved evaluators configured.</b></div>';
+
+    $$('.editEvaluator').forEach(b=>b.onclick=()=>evaluatorEdit(b.dataset.id));
+    $$('.toggleEvaluator').forEach(b=>b.onclick=()=>{
+      const ev=state.evaluators.find(x=>String(x.id)===String(b.dataset.id));
+      if(!ev)return;
+      const before=clone(ev);
+      ev.status=ev.status==='Active'?'Inactive':'Active';
+      const u=ensureEvaluatorAccount(ev);
+      if(u){u.disabled=ev.status!=='Active';saveUsers()}
+      save();
+      audit('UPDATE','Approved Evaluator',ev.id,`${ev.name} status changed to ${ev.status}`,before,ev);
+      drawEvaluatorAdmin();
+    });
+  };
+
+  drawEvaluatorAdmin();
+  $('#addEvaluator').onclick=()=>evaluatorEdit();
 
   const drawEagleDictionary=()=>{
     const lex=state.settings.eagleLexicon||{};
