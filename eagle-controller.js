@@ -1,4 +1,4 @@
-/* RP Eagle Natural Language Max v9.24.1
+/* RP Eagle Natural Language Max v9.25.0
    Deterministic local NLU, no LLM.
    Pipeline:
    normalize -> dictionary expansion -> dialogue control -> identity/context
@@ -7,7 +7,7 @@
 */
 (function(){
   'use strict';
-  const VERSION='9.24.1';
+  const VERSION='9.25.0';
 
   const $one=(s,r=document)=>r.querySelector(s);
   const $all=(s,r=document)=>[...r.querySelectorAll(s)];
@@ -82,7 +82,25 @@
   function activePeople(){return Array.isArray(state?.personnel)?state.personnel.filter(p=>p&&p.name&&p.employeeNumber&&p.status==='Active'):[]}
   function activeTasks(){return Array.isArray(state?.tasks)?state.tasks.filter(t=>t&&t.status==='Active'):[]}
   function activeSubtasks(){return Array.isArray(state?.subtasks)?state.subtasks.filter(s=>s&&s.status==='Active'):[]}
-  function currentPerson(){return activePeople().find(p=>String(p.employeeNumber)===String(currentUser?.employeeNumber||''))||null}
+  function currentPerson(){
+    const people=activePeople();
+    const emp=String(currentUser?.employeeNumber||'').trim();
+    if(emp){
+      const byNumber=people.find(p=>String(p.employeeNumber||'').trim()===emp);
+      if(byNumber)return byNumber;
+    }
+    const signedName=normalizeText(currentUser?.name||currentUser?.username||'');
+    if(signedName){
+      const exact=people.find(p=>normalizeText(p.name)===signedName);
+      if(exact)return exact;
+      const userToken=normalizeText(currentUser?.username||'');
+      if(userToken){
+        const byUser=people.find(p=>normalizeText(p.name).split(' ').includes(userToken));
+        if(byUser)return byUser;
+      }
+    }
+    return null;
+  }
   function isAdmin(){return currentUser?.role==='admin'}
   function mayEvaluate(){return typeof canEvaluate==='function'&&canEvaluate()}
   function mayManageMetl(){return typeof canManageMetl==='function'&&canManageMetl()}
@@ -262,7 +280,7 @@
     {id:'assessment.history',family:'assessment',score:p=>p.assessment&&p.history?420:0},
     {id:'assignment.evaluator',family:'assignment',score:p=>/\b(need to evaluate|assigned to me|waiting for me|my evaluations)\b/.test(p.text)?470:0},
     {id:'assignment.overdue',family:'assignment',score:p=>(p.assignment||p.assessment)&&p.overdue?430:0},
-    {id:'assignment.mine',family:'assignment',score:p=>(p.assignment||p.assessment)&&p.self?380:0},
+    {id:'assignment.mine',family:'assignment',score:p=>((p.assignment||p.assessment)&&p.self?520:0)+(/\b(my assignments|my assigned work|what is assigned to me|what do i have assigned|my training)\b/.test(p.text)?260:0)},
     {id:'assignment.list',family:'assignment',score:p=>p.assignment?300:0},
 
     {id:'development.advancement',family:'advancement',score:p=>p.advancement?500:0},
@@ -308,6 +326,13 @@
 
     // Global questions NEVER inherit an old person subject.
     if(intent.id==='readiness.readyCandidates'||p.globalWhoReady||intent.id==='knowledge.list'){
+      return p;
+    }
+
+    // "my assignments / my assessments" always means the signed-in associate,
+    // never the employee from a previous Eagle question.
+    if(intent.id==='assignment.mine'){
+      p.person=currentPerson();
       return p;
     }
 
@@ -404,8 +429,14 @@
   }
   function visibleAssignments(){
     const all=(state.assessmentAssignments||[]).filter(Boolean);
-    if(currentUser?.role==='viewer')return all.filter(a=>String(a.employeeNumber)===String(currentUser.employeeNumber||''));
-    if(currentUser?.role==='evaluator')return all.filter(a=>String(a.evaluatorUsername||'').toLowerCase()===String(currentUser.username||'').toLowerCase());
+    if(currentUser?.role==='viewer'){
+      const me=currentPerson();
+      if(!me)return[];
+      return all.filter(a=>String(a.employeeNumber||'')===String(me.employeeNumber||''));
+    }
+    if(currentUser?.role==='evaluator'){
+      return all.filter(a=>String(a.evaluatorUsername||'').toLowerCase()===String(currentUser.username||'').toLowerCase());
+    }
     return all;
   }
 

@@ -11,7 +11,7 @@
   };
 
   'use strict';
-  const VERSION='9.24.1';
+  const VERSION='9.25.0';
   const $q=(s,r=document)=>r.querySelector(s);
   const $$q=(s,r=document)=>[...r.querySelectorAll(s)];
   const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
@@ -168,10 +168,157 @@
 
   window.dashboard=function(){
     if(window.reconcileCriticalGateActions)window.reconcileCriticalGateActions();
+
     const people=(state.personnel||[]).filter(p=>p.employeeNumber&&p.name&&p.status==='Active');
     const metrics=people.map(p=>({...p,...personMetrics(p)}));
-    const readiness=metrics.length?Math.round(metrics.reduce((n,x)=>n+x.pct,0)/metrics.length):0;
     const actionRows=window.correctiveActionRepository?window.correctiveActionRepository():(state.actions||[]);
+    const allAssignments=(state.assessmentAssignments||[]).filter(a=>!['Completed','Cancelled'].includes(a.status));
+
+    const signedInPerson=(()=>{
+      const emp=String(currentUser?.employeeNumber||'').trim();
+      if(emp){
+        const hit=people.find(p=>String(p.employeeNumber||'').trim()===emp);
+        if(hit)return hit;
+      }
+      const nm=String(currentUser?.name||currentUser?.username||'').trim().toLowerCase();
+      if(nm){
+        const exact=people.find(p=>String(p.name||'').trim().toLowerCase()===nm);
+        if(exact)return exact;
+      }
+      return null;
+    })();
+
+    const hour=new Date().getHours();
+    const greeting=hour<12?'Good morning':hour<18?'Good afternoon':'Good evening';
+    const userName=escV((currentUser?.name&&String(currentUser.name).trim())||currentUser?.username||'System Administrator');
+    const isViewer=currentUser?.role==='viewer';
+    const isEvaluator=currentUser?.role==='evaluator';
+    const isAdmin=currentUser?.role==='admin';
+
+    // ---------------------------------------------------------------
+    // READ-ONLY ASSOCIATE DASHBOARD
+    // A -10/read-only associate sees only personal, actionable content.
+    // No plant Critical Gates, global shift readiness, or admin missions.
+    // ---------------------------------------------------------------
+    if(isViewer){
+      const me=signedInPerson;
+      const myMetric=me?metrics.find(x=>String(x.employeeNumber)===String(me.employeeNumber)):null;
+      const myAssignments=me?allAssignments.filter(a=>String(a.employeeNumber||'')===String(me.employeeNumber||'')):[];
+      const myActions=me?actionRows.filter(a=>String(a.employeeNumber||'')===String(me.employeeNumber||'')&&a.status!=='Closed'):[];
+      const myOverdue=myActions.filter(a=>a.targetDate&&a.targetDate<today());
+      const myReadiness=myMetric?.pct||0;
+      const levels=['-10','-20','-30','-40'];
+      const levelIndex=me?levels.indexOf(me.assignedLevel||'-10'):-1;
+      const nextLevel=levelIndex>=0&&levelIndex<levels.length-1?levels[levelIndex+1]:null;
+
+      const personalMissions=[];
+      if(myAssignments.length){
+        const first=[...myAssignments].sort((a,b)=>String(a.dueDate||'9999').localeCompare(String(b.dueDate||'9999')))[0];
+        const t=(state.tasks||[]).find(x=>String(x.id)===String(first.taskId));
+        personalMissions.push({
+          tone:'violet',icon:'✓',
+          title:`Complete your assigned ${escV(first.taskId||'assessment')}`,
+          detail:`${escV(t?.name||first.taskName||'Assessment')} · Due ${escV(first.dueDate||'date not set')}`,
+          target:'assignments'
+        });
+      }
+      if(myOverdue.length){
+        personalMissions.push({
+          tone:'amber',icon:'⏱',
+          title:`Review ${myOverdue.length} overdue item${myOverdue.length===1?'':'s'}`,
+          detail:'These items are tied to your own competency record.',
+          target:'profile'
+        });
+      }
+      if(nextLevel){
+        personalMissions.push({
+          tone:'blue',icon:'↗',
+          title:`Keep building toward ${nextLevel}`,
+          detail:`Your recorded readiness is ${myReadiness}%. Progress is built one step at a time.`,
+          target:'profile'
+        });
+      }
+      if(!personalMissions.length){
+        personalMissions.push({
+          tone:'green',icon:'✓',
+          title:'You are caught up right now',
+          detail:'Keep building your skills one standard at a time.',
+          target:'profile'
+        });
+      }
+
+      const top=personalMissions[0];
+      const personalizedReady=`Ready when you are, ${escV(firstName())}. What can I help you accomplish today?`;
+
+      page('Dashboard','',`
+        <section class="command-hero green associate-hero">
+          <div class="command-greeting">
+            <span class="eyebrow">My RP Briefing</span>
+            <h1>${greeting}, ${userName}.</h1>
+            <p>Progress is built one step at a time, ${escV(firstName())}.</p>
+            <p class="eagle-personal-insight">${myAssignments.length?`You have ${myAssignments.length} assigned assessment${myAssignments.length===1?'':'s'} to work on.`:`Your personal RP record is ready when you are.`}</p>
+          </div>
+          <div class="command-status">
+            <small>My level</small>
+            <b>${escV(me?.assignedLevel||'Read only')}</b>
+            <span>${escV(me?.shift||'—')} Shift</span>
+          </div>
+        </section>
+
+        <section class="command-summary associate-summary">
+          <button class="command-metric readiness" data-target="profile"><span>My Readiness</span><b>${myReadiness}%</b><em>${nextLevel?`Toward ${escV(nextLevel)}`:'Current level'}</em></button>
+          <button class="command-metric assessments" data-target="assignments"><span>Assigned Work</span><b>${myAssignments.length}</b><em>${myAssignments.length?'Pending':'Clear'}</em></button>
+          <button class="command-metric actions" data-target="profile"><span>My Open Items</span><b>${myActions.length}</b><em>${myOverdue.length?`${myOverdue.length} overdue`:'On schedule'}</em></button>
+        </section>
+
+        <section class="priority-command card ${top.tone}">
+          <div class="priority-icon">${top.icon}</div>
+          <div><span class="eyebrow">My Next Step</span><h2>${top.title}</h2><p>${top.detail}</p></div>
+          <button class="primary" id="commandResolve">Open</button>
+        </section>
+
+        <div class="command-grid associate-command-grid">
+          <section class="card mission-command">
+            <div class="section-title"><div><span class="eyebrow">My Focus</span><h2>Keep moving forward</h2></div><b>${personalMissions.length} item${personalMissions.length===1?'':'s'}</b></div>
+            <div class="command-mission-list">${personalMissions.slice(0,4).map((m,i)=>`<button data-target="${m.target}" class="command-mission ${m.tone}"><i>${m.icon}</i><span><b>${i+1}. ${m.title}</b><small>${m.detail}</small></span><em>Open →</em></button>`).join('')}</div>
+          </section>
+
+          <section class="card eagle-command">
+            <span class="eyebrow">Ask Eagle</span>
+            <h2>My training and progress assistant</h2>
+            <p>Ask about your assignments, qualification progress, assessments, or approved procedures.</p>
+            <div class="ask-row"><input id="dashBrainQuestion" placeholder="What are my assignments?"><button class="primary" id="dashAskBrain">Ask</button></div>
+            <div id="dashBrainAnswer" class="ai-answer">${personalizedReady}</div>
+            <button class="secondary" id="openFullBrain">Open full conversation</button>
+          </section>
+        </div>`);
+
+      const openPersonal=t=>{
+        if(t==='assignments')return navigate('assignments');
+        if(t==='profile')return navigate('profile');
+      };
+      $$q('[data-target]').forEach(b=>b.onclick=()=>openPersonal(b.dataset.target));
+      $q('#commandResolve').onclick=()=>openPersonal(top.target);
+
+      const run=()=>{
+        const q=$q('#dashBrainQuestion').value.trim();if(!q)return;
+        try{
+          const r=RPBrainEnterprise.answer(q);
+          $q('#dashBrainAnswer').innerHTML=r.html;
+          RPBrainEnterprise.bind($q('#dashBrainAnswer'));
+        }catch(err){$q('#dashBrainAnswer').textContent='Eagle could not complete this request.'}
+      };
+      $q('#dashAskBrain').onclick=run;
+      $q('#dashBrainQuestion').onkeydown=e=>{if(e.key==='Enter')run()};
+      $q('#openFullBrain').onclick=()=>openEaglePanel();
+      return;
+    }
+
+    // ---------------------------------------------------------------
+    // EVALUATOR / ADMIN DASHBOARD
+    // Existing operational view remains for authorized roles.
+    // ---------------------------------------------------------------
+    const readiness=metrics.length?Math.round(metrics.reduce((n,x)=>n+x.pct,0)/metrics.length):0;
     const open=actionRows.filter(a=>a.status!=='Closed');
     const overdue=open.filter(a=>a.targetDate&&a.targetDate<today());
     const critical=(state.results||[]).filter(r=>r.criticality==='Critical Gate'&&r.result!=='GO'&&r.result!=='NOT EVALUATED');
@@ -179,16 +326,24 @@
     const ready=metrics.filter(x=>x.pct===100&&!x.open&&!x.critical).length;
     const shifts=['A','B','C','D'].map(sh=>{const r=metrics.filter(x=>x.shift===sh);return{shift:sh,count:r.length,pct:r.length?Math.round(r.reduce((a,x)=>a+x.pct,0)/r.length):0}});
     const weakest=[...shifts].filter(x=>x.count).sort((a,b)=>a.pct-b.pct)[0];
-    const hour=new Date().getHours(),greeting=hour<12?'Good morning':hour<18?'Good afternoon':'Good evening';
-    const userName=escV(currentUser?.name||currentUser?.username||'System Administrator');
+
     const missions=[];
     if(critical.length)missions.push({tone:'red',icon:'!',title:`Resolve ${critical.length} Critical Gate issue${critical.length===1?'':'s'}`,detail:'Qualification and independent authorization may be blocked.',target:'critical'});
     if(overdue.length)missions.push({tone:'amber',icon:'⏱',title:`Review ${overdue.length} overdue corrective action${overdue.length===1?'':'s'}`,detail:'Closure dates have passed and require attention.',target:'overdue'});
-    if(weakest)missions.push({tone:'blue',icon:'↗',title:`Strengthen ${weakest.shift} Shift readiness`,detail:`Current readiness is ${weakest.pct}%.`,target:'matrix'});
+
+    if(isEvaluator){
+      const mine=allAssignments.filter(a=>String(a.evaluatorUsername||'').toLowerCase()===String(currentUser?.username||'').toLowerCase());
+      if(mine.length)missions.unshift({tone:'violet',icon:'✓',title:`Complete ${mine.length} assigned evaluation${mine.length===1?'':'s'}`,detail:'Associates are waiting for your evaluation.',target:'assignments'});
+    }else if(weakest){
+      missions.push({tone:'blue',icon:'↗',title:`Strengthen ${weakest.shift} Shift readiness`,detail:`Current readiness is ${weakest.pct}%.`,target:'matrix'});
+    }
+
     if(due.length)missions.push({tone:'violet',icon:'✓',title:`Complete ${due.length} upcoming reassessment${due.length===1?'':'s'}`,detail:'Keep qualifications current and traceable.',target:'assessments'});
     if(!missions.length)missions.push({tone:'green',icon:'✓',title:'No urgent compliance issues',detail:'Review upcoming assessments and development opportunities.',target:'assessments'});
+
     const status=critical.length||overdue.length?'Attention Required':readiness>=85?'Stable':'Developing';
     const statusTone=critical.length?'red':overdue.length?'amber':readiness>=85?'green':'blue';
+
     page('Dashboard','',`
       <section class="command-hero ${statusTone}">
         <div class="command-greeting"><span class="eyebrow">Eagle Operational Briefing</span><h1>${greeting}, ${userName}.</h1><p>${escV(motivationalLine())}</p><p class="eagle-personal-insight">${dashboardPersonalInsight(metrics,open,critical,due)}</p></div>
@@ -203,15 +358,26 @@
       </section>
       <section class="priority-command card ${missions[0].tone}"><div class="priority-icon">${missions[0].icon}</div><div><span class="eyebrow">Highest Priority</span><h2>${escV(missions[0].title)}</h2><p>${escV(missions[0].detail)}</p></div><button class="primary" id="commandResolve">Resolve Now</button></section>
       <div class="command-grid">
-        <section class="card mission-command"><div class="section-title"><div><span class="eyebrow">Today's Mission</span><h2>Start with what matters most</h2></div><b>${missions.length} priorities</b></div><div class="mission-progress"><span style="width:0%"></span></div><div class="command-mission-list">${missions.slice(0,4).map((m,i)=>`<button data-target="${m.target}" class="command-mission ${m.tone}"><i>${m.icon}</i><span><b>${i+1}. ${escV(m.title)}</b><small>${escV(m.detail)}</small></span><em>Open →</em></button>`).join('')}</div></section>
-        <section class="card eagle-command"><span class="eyebrow">Ask Eagle</span><h2>Get an answer or open the exact record</h2><p>Search employees, qualifications, actions, tasks, and approved procedures.</p><div class="ask-row"><input id="dashBrainQuestion" placeholder="What does John Smith need to advance?"><button class="primary" id="dashAskBrain">Ask</button></div><div id="dashBrainAnswer" class="ai-answer">Eagle is ready.</div><button class="secondary" id="openFullBrain">Open full conversation</button></section>
+        <section class="card mission-command"><div class="section-title"><div><span class="eyebrow">Today's Mission</span><h2>Start with what matters most</h2></div><b>${missions.length} priorities</b></div><div class="command-mission-list">${missions.slice(0,4).map((m,i)=>`<button data-target="${m.target}" class="command-mission ${m.tone}"><i>${m.icon}</i><span><b>${i+1}. ${escV(m.title)}</b><small>${escV(m.detail)}</small></span><em>Open →</em></button>`).join('')}</div></section>
+        <section class="card eagle-command"><span class="eyebrow">Ask Eagle</span><h2>Get an answer or open the exact record</h2><p>Search employees, qualifications, actions, tasks, and approved procedures.</p><div class="ask-row"><input id="dashBrainQuestion" placeholder="What does John Smith need to advance?"><button class="primary" id="dashAskBrain">Ask</button></div><div id="dashBrainAnswer" class="ai-answer">Ready when you are, ${escV(firstName())}. What can I help you accomplish today?</div><button class="secondary" id="openFullBrain">Open full conversation</button></section>
       </div>
       <section class="card shift-command"><div class="section-title"><div><span class="eyebrow">Readiness by Shift</span><h2>Coverage at a glance</h2></div></div><div class="shift-bars">${shifts.map(s=>`<button data-shift="${s.shift}"><b>${s.shift} Shift</b><span><i style="width:${s.pct}%"></i></span><em>${s.pct}% · ${s.count} active</em></button>`).join('')}</div></section>`);
-    const openTarget=t=>{if(t==='ready')return navigate('personnel');if(t==='matrix'||t==='readiness')return navigate('matrix');if(t==='assessments')return navigate('assessments');if(['critical','open','overdue'].includes(t))return navigate('actions')};
-    $$q('[data-target]').forEach(b=>b.onclick=()=>openTarget(b.dataset.target));$q('#commandResolve').onclick=()=>openTarget(missions[0].target);
+
+    const openTarget=t=>{
+      if(t==='assignments')return navigate('assignments');
+      if(t==='ready')return navigate('personnel');
+      if(t==='matrix'||t==='readiness')return navigate('matrix');
+      if(t==='assessments')return navigate('assessments');
+      if(['critical','open','overdue'].includes(t))return navigate('actions');
+    };
+    $$q('[data-target]').forEach(b=>b.onclick=()=>openTarget(b.dataset.target));
+    $q('#commandResolve').onclick=()=>openTarget(missions[0].target);
     $$q('[data-shift]').forEach(b=>b.onclick=()=>{navigate('matrix');setTimeout(()=>{const el=$q('#mxShift');if(el){el.value=b.dataset.shift;el.dispatchEvent(new Event('change'))}},0)});
+
     const run=()=>{const q=$q('#dashBrainQuestion').value.trim();if(!q)return;try{const r=RPBrainEnterprise.answer(q);$q('#dashBrainAnswer').innerHTML=r.html;RPBrainEnterprise.bind($q('#dashBrainAnswer'))}catch(err){$q('#dashBrainAnswer').textContent='Eagle could not complete this request.'}};
-    $q('#dashAskBrain').onclick=run;$q('#dashBrainQuestion').onkeydown=e=>{if(e.key==='Enter')run()};$q('#openFullBrain').onclick=()=>openEaglePanel();
+    $q('#dashAskBrain').onclick=run;
+    $q('#dashBrainQuestion').onkeydown=e=>{if(e.key==='Enter')run()};
+    $q('#openFullBrain').onclick=()=>openEaglePanel();
   };
 
   window.personnel=function(){
@@ -293,7 +459,7 @@
   window.openEaglePanel=function(){
     let panel=$q('#eagleAssistantPanel');if(!panel){panel=document.createElement('aside');panel.id='eagleAssistantPanel';panel.className='eagle-assistant-panel';document.body.appendChild(panel)}
     const openSeed=(window.__eagleOpenCount=(window.__eagleOpenCount||0)+1);
-    panel.innerHTML=`<div class="eagle-panel-head"><div><img src="rpia-eagle-192.png" alt="Eagle"><span><b>Ask Eagle</b><small>Context: ${escV(currentContext())}</small></span></div><button id="closeEaglePanel" class="icon-btn">✕</button></div><div class="eagle-welcome"><b>${eaglePersonalGreeting(openSeed)}</b><small>I know who is signed in and I’ll keep this conversation tied to your role and current screen.</small></div><div id="eagleMessages" class="eagle-messages">${eagleConversation.map(m=>`<div class="eagle-msg ${m.role}">${m.html}</div>`).join('')||'<div class="eagle-msg assistant">What would you like to work on?</div>'}</div><div class="eagle-compose"><input id="eagleQuestion" placeholder="Ask anything about your operation..."><button class="primary" id="sendEagleQuestion">Ask</button></div>`;
+    panel.innerHTML=`<div class="eagle-panel-head"><div><img src="rpia-eagle-192.png" alt="Eagle"><span><b>Ask Eagle</b><small>Context: ${escV(currentContext())}</small></span></div><button id="closeEaglePanel" class="icon-btn">✕</button></div><div class="eagle-welcome"><b>${eaglePersonalGreeting(openSeed)}</b></div><div id="eagleMessages" class="eagle-messages">${eagleConversation.map(m=>`<div class="eagle-msg ${m.role}">${m.html}</div>`).join('')||'<div class="eagle-msg assistant">What would you like to work on?</div>'}</div><div class="eagle-compose"><input id="eagleQuestion" placeholder="Ask anything about your operation..."><button class="primary" id="sendEagleQuestion">Ask</button></div>`;
     panel.classList.add('open');window.closeEaglePanel=()=>panel.classList.remove('open');$q('#closeEaglePanel').onclick=window.closeEaglePanel;try{RPBrainEnterprise.bind(panel)}catch(err){log('WARNING','Navigation Service','Could not bind Eagle result actions',err.message)};
     const send=()=>{const input=$q('#eagleQuestion'),q=input.value.trim();if(!q)return;eagleConversation.push({role:'user',html:escV(q)});let html;try{const r=RPBrainEnterprise.answer(q);html=r.html;const why=ReasoningEngine.explain(q,r);html+=`<details class="reasoning-summary"><summary>Why this answer?</summary><p>${escV(why.summary)}</p></details>`;log('INFO','Eagle',`Question answered in ${currentContext()}`,why.summary)}catch(err){html=`Eagle could not complete this request. ${escV(err.message||'')}`;log('ERROR','Eagle','Floating assistant failed',err.message)}eagleConversation.push({role:'assistant',html});openEaglePanel();setTimeout(()=>{$q('#eagleMessages').scrollTop=$q('#eagleMessages').scrollHeight},0)};
     $q('#sendEagleQuestion').onclick=send;$q('#eagleQuestion').onkeydown=e=>{if(e.key==='Enter')send()};setTimeout(()=>$q('#eagleQuestion')?.focus(),50)
@@ -411,7 +577,7 @@
   ];
   window.renderNav=function(){
     const allowed=window.navDefs.filter(x=>{if(['settings','enterprise'].includes(x[0]))return currentUser.role==='admin';if(x[0]==='audit')return currentUser.role==='admin'||currentUser.role==='evaluator';return true});
-    $q('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}<small>v9.24.1</small></div>`;
+    $q('#nav').innerHTML=allowed.map(([id,en,es])=>`<button data-view="${id}">${uiLanguage==='es'?es:en}</button>`).join('')+`<div class="nav-spacer"></div><div class="nav-footer"><strong>RP</strong>${uiLanguage==='es'?'Impulsado por RP':'Powered by RP'}<small>v9.25.0</small></div>`;
     $$q('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.view));
   };
   window.navigate=function(v){
